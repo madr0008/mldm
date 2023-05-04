@@ -37,15 +37,6 @@ class Part(enum.Enum):
         return self.value
 
 
-class TaskType(enum.Enum):
-    BINCLASS = 'binclass'
-    MULTICLASS = 'multiclass'
-    REGRESSION = 'regression'
-
-    def __str__(self) -> str:
-        return self.value
-
-
 class Timer(zero.Timer):
     @classmethod
     def launch(cls) -> 'Timer':
@@ -184,7 +175,7 @@ def load_checkpoint(path: Path, *args, **kwargs) -> Dict[str, np.ndarray]:
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         assert os.environ.get('CUDA_VISIBLE_DEVICES') is not None
-        return torch.device('cuda:0')
+        return torch.device('cuda')
     else:
         return torch.device('cpu')
 
@@ -322,33 +313,9 @@ def backup_output(output_dir: Path) -> None:
         print('The snapshot was saved!')
 
 
-def _get_scores(metrics: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, float]]:
-    return (
-        {k: v['score'] for k, v in metrics.items()}
-        if 'score' in next(iter(metrics.values()))
-        else None
-    )
-
-
-def format_scores(metrics: Dict[str, Dict[str, Any]]) -> str:
-    return ' '.join(
-        f"[{x}] {metrics[x]['score']:.3f}"
-        for x in ['test', 'val', 'train']
-        if x in metrics
-    )
-
-
 def finish(output_dir: Path, report: dict) -> None:
     print()
     _print_sep('=')
-
-    metrics = report.get('metrics')
-    if metrics is not None:
-        scores = _get_scores(metrics)
-        if scores is not None:
-            dump_json(scores, output_dir / 'scores.json')
-            print(format_scores(metrics))
-            _print_sep('-')
 
     dump_report(report, output_dir)
     json_output_path = os.environ.get('JSON_OUTPUT_FILE')

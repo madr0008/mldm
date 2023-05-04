@@ -10,8 +10,6 @@ import torch.optim as optim
 import zero
 from torch import Tensor
 
-from .util import TaskType
-
 
 def cos_sin(x: Tensor) -> Tensor:
     return torch.cat([torch.cos(x), torch.sin(x)], -1)
@@ -48,13 +46,9 @@ def get_n_parameters(m: nn.Module):
     return sum(x.numel() for x in m.parameters() if x.requires_grad)
 
 
-def get_loss_fn(task_type: TaskType) -> Callable[..., Tensor]:
+def get_loss_fn() -> Callable[..., Tensor]:
     return (
         F.binary_cross_entropy_with_logits
-        if task_type == TaskType.BINCLASS
-        else F.cross_entropy
-        if task_type == TaskType.MULTICLASS
-        else F.mse_loss
     )
 
 

@@ -5,6 +5,7 @@ from dataclasses import astuple, dataclass, replace
 from importlib.resources import path
 from pathlib import Path
 from typing import Any, Literal, Optional, Union, cast, Tuple, Dict, List
+from bs4 import BeautifulSoup as bs
 
 import numpy as np
 import pandas as pd
@@ -19,8 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import cdist
 
 from . import env, util
-from .metrics import calculate_metrics as calculate_metrics_
-from .util import TaskType, load_json
+from .util import load_json
 
 ArrayDict = Dict[str, np.ndarray]
 TensorDict = Dict[str, torch.Tensor]
@@ -54,50 +54,101 @@ def get_category_sizes(X: Union[torch.Tensor, np.ndarray]) -> List[int]:
     return [len(set(x)) for x in XT]
 
 
+def loadArff(arffPath, xmlPath):
+    #Get labels from XML file
+    with open(xmlPath, 'r') as file:
+        content = file.read()
+    bs_content = bs(content, "lxml")
+    result = bs_content.find_all("label")
+    labelNames = [x.get("name") for x in result]
+    #Get values from ARFF file
+    with open(arffPath, 'r') as arff:
+        lines = arff.readlines()
+    catAttributesIndexes = []
+    numAttributesIndexes = []
+    labelsIndexes = []
+    aux = 0
+    cont = 0
+    #Get attribute indexes
+    for i in range(len(lines)):
+        if '@data' in lines[i]:
+            aux = i
+            break
+        elif '@attribute' in lines[i]:
+            v = lines[i].split(' ')
+            if v[2] == 'numeric':
+                numAttributesIndexes.append(cont)
+            elif v[1] not in labelNames:
+                catAttributesIndexes.append(cont)
+            else:
+                labelsIndexes.append(cont)
+            cont += 1
+    #Get data
+    catAttributes = []
+    numAttributes = []
+    labels = []
+    for line in lines[(aux+1):]:
+        if line[0] == '{':
+            #Sparse
+            catAttributesAux = ['0' for c in catAttributesIndexes]
+            numAttributesAux = [0 for n in numAttributesIndexes]
+            labelsAux = ['0' for l in labelsIndexes]
+            pairs = line.replace('{', '').replace('}', '').replace('\n', '').split(',')
+            for p in pairs:
+                pair = p.split(' ')
+                index = int(pair[0])
+                if index in labelsIndexes:
+                    labelsAux[labelsIndexes.index(index)] = pair[1]
+                elif index in catAttributesIndexes:
+                    catAttributesAux[catAttributesIndexes.index(index)] = pair[1]
+                else:
+                    print(index)
+                    numAttributesAux[numAttributesIndexes.index(index)] = float(pair[1])
+            if len(catAttributesIndexes) > 0:
+                catAttributes.append(catAttributesAux)
+            if len(numAttributesIndexes) > 0:
+                numAttributes.append(numAttributesAux)
+            labels.append(labelsAux)
+        else:
+            #Normal
+            values = line.split(' ')
+            for i in range(len(values)):
+                if i in labels:
+                    labels.append(values[i])
+                elif i in catAttributes:
+                    catAttributes.append(values[i])
+                else:
+                    numAttributes.append(float(values[i]))
+    #Transform lists of lists to numpy arrays
+    numAttributesRet = np.array([np.array(xi) for xi in numAttributes]) if len(numAttributes) > 0 else None
+    catAttributesRet = np.array([np.array(xi) for xi in catAttributes]) if len(catAttributes) > 0 else None
+    labelsRet = np.array([np.array(xi) for xi in labels])
+
+    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames)
+
+
 @dataclass(frozen=False)
-class Dataset:
+class Dataset:  #No se si añadir las propias etiquetas
     X_num: Optional[ArrayDict]
     X_cat: Optional[ArrayDict]
     y: ArrayDict
-    y_info: Dict[str, Any]
-    task_type: TaskType
-    n_classes: Optional[int]
+    n_labels: Optional[int]
 
     @classmethod
     def from_dir(cls, dir_: Union[Path, str]) -> 'Dataset':
         dir_ = Path(dir_)
-        splits = [k for k in ['train', 'val', 'test'] if dir_.joinpath(f'y_{k}.npy').exists()]
+        X_num = {}
+        X_cat = {}
+        y = {}
+        X_num['train'], X_cat['train'], y['train'], numLabels = loadArff(dir_)
 
-        def load(item) -> ArrayDict:
-            return {
-                x: cast(np.ndarray, np.load(dir_ / f'{item}_{x}.npy', allow_pickle=True))  # type: ignore[code]
-                for x in splits
-            }
-
-        if Path(dir_ / 'info.json').exists():
-            info = util.load_json(dir_ / 'info.json')
-        else:
-            info = None
         return Dataset(
-            load('X_num') if dir_.joinpath('X_num_train.npy').exists() else None,
-            load('X_cat') if dir_.joinpath('X_cat_train.npy').exists() else None,
-            load('y'),
+            X_num,
+            X_cat,
+            y,
             {},
-            TaskType(info['task_type']),
-            info.get('n_classes'),
+            numLabels,
         )
-
-    @property
-    def is_binclass(self) -> bool:
-        return self.task_type == TaskType.BINCLASS
-
-    @property
-    def is_multiclass(self) -> bool:
-        return self.task_type == TaskType.MULTICLASS
-
-    @property
-    def is_regression(self) -> bool:
-        return self.task_type == TaskType.REGRESSION
 
     @property
     def n_num_features(self) -> int:
@@ -116,93 +167,10 @@ class Dataset:
 
     @property
     def nn_output_dim(self) -> int:
-        if self.is_multiclass:
-            assert self.n_classes is not None
-            return self.n_classes
-        else:
-            return 1
+        return self.n_labels
 
     def get_category_sizes(self, part: str) -> List[int]:
         return [] if self.X_cat is None else get_category_sizes(self.X_cat[part])
-
-    def calculate_metrics(
-        self,
-        predictions: Dict[str, np.ndarray],
-        prediction_type: Optional[str],
-    ) -> Dict[str, Any]:
-        metrics = {
-            x: calculate_metrics_(
-                self.y[x], predictions[x], self.task_type, prediction_type, self.y_info
-            )
-            for x in predictions
-        }
-        if self.task_type == TaskType.REGRESSION:
-            score_key = 'rmse'
-            score_sign = -1
-        else:
-            score_key = 'accuracy'
-            score_sign = 1
-        for part_metrics in metrics.values():
-            part_metrics['score'] = score_sign * part_metrics[score_key]
-        return metrics
-
-def change_val(dataset: Dataset, val_size: float = 0.2):
-    # should be done before transformations
-
-    y = np.concatenate([dataset.y['train'], dataset.y['val']], axis=0)
-
-    ixs = np.arange(y.shape[0])
-    if dataset.is_regression:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777)
-    else:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777, stratify=y)
-
-    dataset.y['train'] = y[train_ixs]
-    dataset.y['val'] = y[val_ixs]
-
-    if dataset.X_num is not None:
-        X_num = np.concatenate([dataset.X_num['train'], dataset.X_num['val']], axis=0)
-        dataset.X_num['train'] = X_num[train_ixs]
-        dataset.X_num['val'] = X_num[val_ixs]
-
-    if dataset.X_cat is not None:
-        X_cat = np.concatenate([dataset.X_cat['train'], dataset.X_cat['val']], axis=0)
-        dataset.X_cat['train'] = X_cat[train_ixs]
-        dataset.X_cat['val'] = X_cat[val_ixs]
-
-    return dataset
-
-def num_process_nans(dataset: Dataset, policy: Optional[NumNanPolicy]) -> Dataset:
-    assert dataset.X_num is not None
-    nan_masks = {k: np.isnan(v) for k, v in dataset.X_num.items()}
-    if not any(x.any() for x in nan_masks.values()):  # type: ignore[code]
-        assert policy is None
-        return dataset
-
-    assert policy is not None
-    if policy == 'drop-rows':
-        valid_masks = {k: ~v.any(1) for k, v in nan_masks.items()}
-        assert valid_masks[
-            'test'
-        ].all(), 'Cannot drop test rows, since this will affect the final metrics.'
-        new_data = {}
-        for data_name in ['X_num', 'X_cat', 'y']:
-            data_dict = getattr(dataset, data_name)
-            if data_dict is not None:
-                new_data[data_name] = {
-                    k: v[valid_masks[k]] for k, v in data_dict.items()
-                }
-        dataset = replace(dataset, **new_data)
-    elif policy == 'mean':
-        new_values = np.nanmean(dataset.X_num['train'], axis=0)
-        X_num = deepcopy(dataset.X_num)
-        for k, v in X_num.items():
-            num_nan_indices = np.where(nan_masks[k])
-            v[num_nan_indices] = np.take(new_values, num_nan_indices[1])
-        dataset = replace(dataset, X_num=X_num)
-    else:
-        assert util.raise_unknown('policy', policy)
-    return dataset
 
 
 # Inspired by: https://github.com/yandex-research/rtdl/blob/a4c93a32b334ef55d2a0559a4407c8306ffeeaee/lib/data.py#L20
@@ -235,41 +203,6 @@ def normalize(
     if return_normalizer:
         return {k: normalizer.transform(v) for k, v in X.items()}, normalizer
     return {k: normalizer.transform(v) for k, v in X.items()}
-
-
-def cat_process_nans(X: ArrayDict, policy: Optional[CatNanPolicy]) -> ArrayDict:
-    assert X is not None
-    nan_masks = {k: v == CAT_MISSING_VALUE for k, v in X.items()}
-    if any(x.any() for x in nan_masks.values()):  # type: ignore[code]
-        if policy is None:
-            X_new = X
-        elif policy == 'most_frequent':
-            imputer = SimpleImputer(missing_values=CAT_MISSING_VALUE, strategy=policy)  # type: ignore[code]
-            imputer.fit(X['train'])
-            X_new = {k: cast(np.ndarray, imputer.transform(v)) for k, v in X.items()}
-        else:
-            util.raise_unknown('categorical NaN policy', policy)
-    else:
-        assert policy is None
-        X_new = X
-    return X_new
-
-
-def cat_drop_rare(X: ArrayDict, min_frequency: float) -> ArrayDict:
-    assert 0.0 < min_frequency < 1.0
-    min_count = round(len(X['train']) * min_frequency)
-    X_new = {x: [] for x in X}
-    for column_idx in range(X['train'].shape[1]):
-        counter = Counter(X['train'][:, column_idx].tolist())
-        popular_categories = {k for k, v in counter.items() if v >= min_count}
-        for part in X_new:
-            X_new[part].append(
-                [
-                    (x if x in popular_categories else CAT_RARE_VALUE)
-                    for x in X[part][:, column_idx].tolist()
-                ]
-            )
-    return {k: np.array(v).T for k, v in X_new.items()}
 
 
 def cat_encode(
@@ -333,32 +266,11 @@ def cat_encode(
     return (X, True)
 
 
-def build_target(
-    y: ArrayDict, policy: Optional[YPolicy], task_type: TaskType
-) -> Tuple[ArrayDict, Dict[str, Any]]:
-    info: Dict[str, Any] = {'policy': policy}
-    if policy is None:
-        pass
-    elif policy == 'default':
-        if task_type == TaskType.REGRESSION:
-            mean, std = float(y['train'].mean()), float(y['train'].std())
-            y = {k: (v - mean) / std for k, v in y.items()}
-            info['mean'] = mean
-            info['std'] = std
-    else:
-        util.raise_unknown('policy', policy)
-    return y, info
-
-
 @dataclass(frozen=True)
 class Transformations:
     seed: int = 0
     normalization: Optional[Normalization] = None
-    num_nan_policy: Optional[NumNanPolicy] = None
-    cat_nan_policy: Optional[CatNanPolicy] = None
-    cat_min_frequency: Optional[float] = None
     cat_encoding: Optional[CatEncoding] = None
-    y_policy: Optional[YPolicy] = 'default'
 
 
 def transform_dataset(
@@ -389,9 +301,6 @@ def transform_dataset(
     else:
         cache_path = None
 
-    if dataset.X_num is not None:
-        dataset = num_process_nans(dataset, transformations.num_nan_policy)
-
     num_transform = None
     cat_transform = None
     X_num = dataset.X_num
@@ -411,11 +320,8 @@ def transform_dataset(
         # assert transformations.cat_encoding is None
         X_cat = None
     else:
-        X_cat = cat_process_nans(dataset.X_cat, transformations.cat_nan_policy)
-        if transformations.cat_min_frequency is not None:
-            X_cat = cat_drop_rare(X_cat, transformations.cat_min_frequency)
         X_cat, is_num, cat_transform = cat_encode(
-            X_cat,
+            dataset.X_cat,
             transformations.cat_encoding,
             dataset.y['train'],
             transformations.seed,
@@ -429,9 +335,7 @@ def transform_dataset(
             )
             X_cat = None
 
-    y, y_info = build_target(dataset.y, transformations.y_policy, dataset.task_type)
-
-    dataset = replace(dataset, X_num=X_num, X_cat=X_cat, y=y, y_info=y_info)
+    dataset = replace(dataset, X_num=X_num, X_cat=X_cat, y=dataset.y)
     dataset.num_transform = num_transform
     dataset.cat_transform = cat_transform
 
@@ -476,7 +380,7 @@ def prepare_tensors(
 
 class TabDataset(torch.utils.data.Dataset):
     def __init__(
-        self, dataset : Dataset, split : Literal['train', 'val', 'test']
+        self, dataset : Dataset, split : Literal['train']
     ):
         super().__init__()
         
@@ -681,27 +585,18 @@ def read_pure_data(path, split='train'):
 
 def read_changed_val(path, val_size=0.2):
     path = Path(path)
-    X_num_train, X_cat_train, y_train = read_pure_data(path, 'train')
-    X_num_val, X_cat_val, y_val = read_pure_data(path, 'val')
-    is_regression = load_json(path / 'info.json')['task_type'] == 'regression'
-
-    y = np.concatenate([y_train, y_val], axis=0)
+    X_num, X_cat, y = read_pure_data(path, 'train')
 
     ixs = np.arange(y.shape[0])
-    if is_regression:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777)
-    else:
-        train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777, stratify=y)
+    train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777, stratify=y)
     y_train = y[train_ixs]
     y_val = y[val_ixs]
 
-    if X_num_train is not None:
-        X_num = np.concatenate([X_num_train, X_num_val], axis=0)
+    if X_num is not None:
         X_num_train = X_num[train_ixs]
         X_num_val = X_num[val_ixs]
 
-    if X_cat_train is not None:
-        X_cat = np.concatenate([X_cat_train, X_cat_val], axis=0)
+    if X_cat is not None:
         X_cat_train = X_cat[train_ixs]
         X_cat_val = X_cat[val_ixs]
     
