@@ -62,7 +62,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
 class GaussianMultinomialDiffusion(torch.nn.Module):
     def __init__(
             self,
-            num_classes: np.array,
+            num_classes: np.array,  #Esto no son clases en plan multiclase, sino el numero de clases que puede tomar cada uno de los atributos numericos
             num_numerical_features: int,
             denoise_fn,
             num_timesteps=1000,
@@ -83,7 +83,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                   ' This is expensive both in terms of memory and computation.')
 
         self.num_numerical_features = num_numerical_features
-        self.num_classes = num_classes # it as a vector [K1, K2, ..., Km]
+        self.num_classes = num_classes  #it as a vector [K1, K2, ..., Km]
         self.num_classes_expanded = torch.from_numpy(
             np.concatenate([num_classes[i].repeat(num_classes[i]) for i in range(len(num_classes))])
         ).to(device)
@@ -986,6 +986,42 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             if sample.shape[0] != b:
                 raise FoundNANsError
             num_generated += sample.shape[0]
+
+        x_gen = torch.cat(all_samples, dim=0)[:num_samples]
+        y_gen = torch.cat(all_y, dim=0)[:num_samples]
+
+        return x_gen, y_gen
+
+    def sample_loop(self, num_samples, max_iter, batch_size, y_dist, D, ddim=False):
+        if ddim:
+            print('Sample using DDIM.')
+            sample_fn = self.sample_ddim
+        else:
+            sample_fn = self.sample
+
+        b = batch_size
+
+        all_y = []
+        all_samples = []
+        num_generated = 0
+        num_valid = 0
+        while num_valid > num_samples and num_generated < max_iter:
+            sample, out_dict = sample_fn(b, y_dist)
+            mask_nan = torch.any(sample.isnan(), dim=1)
+            sample = sample[~mask_nan]
+            out_dict['y'] = out_dict['y'][~mask_nan]
+            if sample.shape[0] != b:
+                raise FoundNANsError
+            num_generated += sample.shape[0]
+
+            #AQUI SOLO COMPRUEBA SI PERTENECE A MINORITARIA Y ESTAMOS CHILL
+            labelIndexes = D[D.n_labels:]
+            for i in range(b):
+                for j in labelIndexes:  #En realidad, seria minoritarios
+                    if sample[i][j] == 1:
+                        all_samples.append(sample[i])
+                        all_y.append(out_dict['y'][i].cpu())
+
 
         x_gen = torch.cat(all_samples, dim=0)[:num_samples]
         y_gen = torch.cat(all_y, dim=0)[:num_samples]

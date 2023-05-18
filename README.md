@@ -11,8 +11,8 @@ Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/
     export REPO_DIR=/path/to/the/code
     cd $REPO_DIR
 
-    conda create -n tddpm python=3.9.7
-    conda activate tddpm
+    conda create -n mldm python=3.9.7
+    conda activate mldm
 
     pip install torch==1.10.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
     pip install -r requirements.txt
@@ -22,12 +22,12 @@ Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/
     conda env config vars set PROJECT_DIR=${REPO_DIR}
 
     conda deactivate
-    conda activate tddpm
+    conda activate mldm
     ```
 
-#### Conjuntos de datos
+### Conjuntos de datos
 
-Los conjuntos de datos multietiqueta (MLD) soportados por el algoritmo son aquellos en formato ...
+Los conjuntos de datos multietiqueta (MLD) soportados por el algoritmo son aquellos en formato ARFF, acompañados de un fichero XML que especifique el nombre de las etiquetas. Este formato es el mismo que usa la biblioteca [MULAN](https://mulan.sourceforge.net/).
 
 En el repositorio [Cometa](https://cometa.ujaen.es/) se recopila una gran variedad de MLD, completos o previamente particionados. 
 
@@ -36,11 +36,12 @@ En el repositorio [Cometa](https://cometa.ujaen.es/) se recopila una gran varied
 Para ejecutar el algoritmo sobre un conjunto de datos, tan solo hay que ejecutar los siguientes comandos.
 
 ``` bash
-conda activate tddpm
+conda activate mldm
 cd $PROJECT_DIR
-wget "https://www.dropbox.com/s/rpckvcs3vx7j605/data.tar?dl=0" -O data.tar
-tar -xvf data.tar
+python scripts/pipeline.py --config_file=config.toml
 ```
+
+Los parámetros para la ejecución del modelo se encuentran un fichero de configuración con formato `toml`. La estructura y parámetros recogidos en este fichero se explican [aquí](CONFIG_DESCRIPTION.md).
 
 ## Estructura de ficheros
 `mldm/` -- Directorio con la implementación del método propuesto

@@ -54,11 +54,11 @@ def get_category_sizes(X: Union[torch.Tensor, np.ndarray]) -> List[int]:
     return [len(set(x)) for x in XT]
 
 
-def loadArff(arffPath, xmlPath):
+def loadArff(arffPath, xmlPath, general):
     #Get labels from XML file
     with open(xmlPath, 'r') as file:
         content = file.read()
-    bs_content = bs(content, "lxml")
+    bs_content = bs(content, features="xml")
     result = bs_content.find_all("label")
     labelNames = [x.get("name") for x in result]
     #Get values from ARFF file
@@ -69,20 +69,26 @@ def loadArff(arffPath, xmlPath):
     labelsIndexes = []
     aux = 0
     cont = 0
+    header = ''
     #Get attribute indexes
     for i in range(len(lines)):
+        header += lines[i]
         if '@data' in lines[i]:
+            header = header[:-1]
             aux = i
             break
         elif '@attribute' in lines[i]:
             v = lines[i].split(' ')
-            if v[2] == 'numeric':
+            if v[2] == 'numeric\n':
                 numAttributesIndexes.append(cont)
             elif v[1] not in labelNames:
                 catAttributesIndexes.append(cont)
             else:
                 labelsIndexes.append(cont)
             cont += 1
+    if general:
+        catAttributesIndexes += labelsIndexes
+        labelsIndexes = []
     #Get data
     catAttributes = []
     numAttributes = []
@@ -90,9 +96,10 @@ def loadArff(arffPath, xmlPath):
     for line in lines[(aux+1):]:
         if line[0] == '{':
             #Sparse
+            sparse = True
             catAttributesAux = ['0' for c in catAttributesIndexes]
             numAttributesAux = [0 for n in numAttributesIndexes]
-            labelsAux = ['0' for l in labelsIndexes]
+            labelsAux = 0 if general else ['0' for l in labelsIndexes]
             pairs = line.replace('{', '').replace('}', '').replace('\n', '').split(',')
             for p in pairs:
                 pair = p.split(' ')
@@ -111,20 +118,60 @@ def loadArff(arffPath, xmlPath):
             labels.append(labelsAux)
         else:
             #Normal
-            values = line.split(' ')
+            sparse = False
+            catAttributesAux = []
+            numAttributesAux = []
+            labelsAux = 0 if general else []
+            values = line.split(',')
             for i in range(len(values)):
-                if i in labels:
-                    labels.append(values[i])
-                elif i in catAttributes:
-                    catAttributes.append(values[i])
+                if i in labelsIndexes:
+                    labelsAux.append(values[i])
+                elif i in catAttributesIndexes:
+                    catAttributesAux.append(values[i].replace('\n',''))
                 else:
-                    numAttributes.append(float(values[i]))
+                    numAttributesAux.append(float(values[i]))
+            if len(catAttributesIndexes) > 0:
+                catAttributes.append(catAttributesAux)
+            if len(numAttributesIndexes) > 0:
+                numAttributes.append(numAttributesAux)
+            labels.append(labelsAux)
+
     #Transform lists of lists to numpy arrays
     numAttributesRet = np.array([np.array(xi) for xi in numAttributes]) if len(numAttributes) > 0 else None
     catAttributesRet = np.array([np.array(xi) for xi in catAttributes]) if len(catAttributes) > 0 else None
-    labelsRet = np.array([np.array(xi) for xi in labels])
+    labelsRet = np.array(labels) if general else np.array([np.array(xi) for xi in labels])
 
-    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames)
+    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes
+
+
+def toArff(D, X_num, X_cat, num_instances, filename):
+    content = D.arffHeader
+    for i in range(num_instances):
+        line = ''
+        if D.sparse:
+            line = '{'
+        contNum = 0
+        contCat = 0
+        for j in (D.numIndexes + D.catIndexes):
+            if j in D.numIndexes:
+                if D.sparse:
+                    line += str(j) + ' ' + str(X_num[i][contNum]) + ','
+                else:
+                    line += str(X_num[i][contNum]) + ','
+                contNum += 1
+            else:
+                if D.sparse:
+                    if X_cat[i][contCat] == 1:
+                        line += str(j) + ' ' + str(X_cat[i][contCat]) + ','
+                else:
+                    line += str(X_cat[i][contCat]) + ','
+                contCat += 1
+        line = line[:-1]
+        if D.sparse:
+            line += '}'
+        content += '\n' + line
+    with open(filename, 'w') as file:
+        file.write(content)
 
 
 @dataclass(frozen=False)
@@ -133,21 +180,27 @@ class Dataset:  #No se si añadir las propias etiquetas
     X_cat: Optional[ArrayDict]
     y: ArrayDict
     n_labels: Optional[int]
+    arffHeader: str
+    sparse: bool
+    numIndexes: list
+    catIndexes: list
 
     @classmethod
-    def from_dir(cls, dir_: Union[Path, str]) -> 'Dataset':
+    def from_dir(cls, dir_: str, general: bool) -> 'Dataset':
         dir_ = Path(dir_)
         X_num = {}
         X_cat = {}
         y = {}
-        X_num['train'], X_cat['train'], y['train'], numLabels = loadArff(dir_)
-
+        X_num['train'], X_cat['train'], y['train'], numLabels, header, sparse, numIndexes, catIndexes = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'), general)
         return Dataset(
             X_num,
             X_cat,
             y,
-            {},
             numLabels,
+            header,
+            sparse,
+            numIndexes,
+            catIndexes
         )
 
     @property
@@ -162,8 +215,8 @@ class Dataset:  #No se si añadir las propias etiquetas
     def n_features(self) -> int:
         return self.n_num_features + self.n_cat_features
 
-    def size(self, part: Optional[str]) -> int:
-        return sum(map(len, self.y.values())) if part is None else len(self.y[part])
+    def size(self) -> int:
+        return len(self.y['train'])
 
     @property
     def nn_output_dim(self) -> int:

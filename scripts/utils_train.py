@@ -9,7 +9,7 @@ def get_model(
     n_num_features,
     category_sizes
 ): 
-    print(model_name)
+    #print(model_name)
     if model_name == 'mlp':
         model = MLPDiffusion(**model_params)
     elif model_name == 'resnet':
@@ -37,53 +37,8 @@ def concat_y_to_X(X, y):
 def make_dataset(
     data_path: str,
     T: lib.Transformations,
-    num_classes: int,
-    is_y_cond: bool,
-    change_val: bool
+    general: bool
 ):
-    # classification
-    if num_classes > 0:
-        X_cat = {} if os.path.exists(os.path.join(data_path, 'X_cat_train.npy')) or not is_y_cond else None
-        X_num = {} if os.path.exists(os.path.join(data_path, 'X_num_train.npy')) else None
-        y = {} 
-
-        for split in ['train', 'val', 'test']:
-            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split)
-            if X_num is not None:
-                X_num[split] = X_num_t
-            if not is_y_cond:
-                X_cat_t = concat_y_to_X(X_cat_t, y_t)
-            if X_cat is not None:
-                X_cat[split] = X_cat_t
-            y[split] = y_t
-    else:
-        # regression
-        X_cat = {} if os.path.exists(os.path.join(data_path, 'X_cat_train.npy')) else None
-        X_num = {} if os.path.exists(os.path.join(data_path, 'X_num_train.npy')) or not is_y_cond else None
-        y = {}
-
-        for split in ['train', 'val', 'test']:
-            X_num_t, X_cat_t, y_t = lib.read_pure_data(data_path, split)
-            if not is_y_cond:
-                X_num_t = concat_y_to_X(X_num_t, y_t)
-            if X_num is not None:
-                X_num[split] = X_num_t
-            if X_cat is not None:
-                X_cat[split] = X_cat_t
-            y[split] = y_t
-
-    info = lib.load_json(os.path.join(data_path, 'info.json'))
-
-    D = lib.Dataset(
-        X_num,
-        X_cat,
-        y,
-        y_info={},
-        task_type=lib.TaskType(info['task_type']),
-        n_classes=info.get('n_classes')
-    )
-
-    if change_val:
-        D = lib.change_val(D)
+    D = lib.Dataset.from_dir(data_path, general)
     
     return lib.transform_dataset(D, T, None)

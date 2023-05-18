@@ -3,7 +3,7 @@ import torch
 import os
 import numpy as np
 import zero
-from tab_ddpm import GaussianMultinomialDiffusion
+from tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset, update_ema
 import lib
 import pandas as pd
@@ -88,11 +88,13 @@ def train(
     scheduler = 'cosine',
     T_dict = None,
     device = torch.device('cuda:1'),
+    strategy="general",
     seed = 0,
-    change_val = False
 ):
     real_data_path = os.path.normpath(real_data_path)
     parent_dir = os.path.normpath(parent_dir)
+
+    #EN ESTE MOMENTO, if strategy == "general", LO DE ABAJO. else, ENTRENAR DISTINTOS CLASIFICADORES Y TAL
 
     zero.improve_reproducibility(seed)
 
@@ -101,22 +103,20 @@ def train(
     dataset = make_dataset(
         real_data_path,
         T,
-        num_classes=model_params['num_classes'],
-        is_y_cond=model_params['is_y_cond'],
-        change_val=change_val
+        strategy == "general"
     )
 
     K = np.array(dataset.get_category_sizes('train'))
     if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
         K = np.array([0])
-    print(K)
+    #print(K)
 
     num_numerical_features = dataset.X_num['train'].shape[1] if dataset.X_num is not None else 0
     d_in = np.sum(K) + num_numerical_features
     model_params['d_in'] = d_in
-    print(d_in)
+    #print(d_in)
     
-    print(model_params)
+    #print(model_params)
     model = get_model(
         model_type,
         model_params,
@@ -127,8 +127,6 @@ def train(
 
     # train_loader = lib.prepare_beton_loader(dataset, split='train', batch_size=batch_size)
     train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
-
-
 
     diffusion = GaussianMultinomialDiffusion(
         num_classes=K,

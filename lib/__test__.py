@@ -1,7 +1,14 @@
-from lib.data import loadArff
-
+from lib.data import loadArff, toArff
+from scripts.utils_train import make_dataset
+import lib
 
 def prueba():
-    numAtt, catAtt, labels = loadArff('/home/miguelangel/corel5k-stra-2x5-10-tst.arff', '/home/miguelangel/corel5k-stra-2x5-10-tst.xml')
+    D = make_dataset(
+        '/home/miguelangel/datasets/birds/birds',
+        lib.Transformations(None),
+        True
+    )
+
+    toArff(D, D.X_num['train'], D.X_cat['train'], 20, 'salida.arff')
 
 prueba()
