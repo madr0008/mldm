@@ -54,7 +54,7 @@ def get_category_sizes(X: Union[torch.Tensor, np.ndarray]) -> List[int]:
     return [len(set(x)) for x in XT]
 
 
-def loadArff(arffPath, xmlPath, general):
+def loadArff(arffPath, xmlPath):
     #Get labels from XML file
     with open(xmlPath, 'r') as file:
         content = file.read()
@@ -86,9 +86,7 @@ def loadArff(arffPath, xmlPath, general):
             else:
                 labelsIndexes.append(cont)
             cont += 1
-    if general:
-        catAttributesIndexes += labelsIndexes
-        labelsIndexes = []
+
     #Get data
     catAttributes = []
     numAttributes = []
@@ -99,34 +97,27 @@ def loadArff(arffPath, xmlPath, general):
             sparse = True
             catAttributesAux = ['0' for c in catAttributesIndexes]
             numAttributesAux = [0 for n in numAttributesIndexes]
-            labelsAux = 0 if general else ['0' for l in labelsIndexes]
             pairs = line.replace('{', '').replace('}', '').replace('\n', '').split(',')
             for p in pairs:
                 pair = p.split(' ')
                 index = int(pair[0])
-                if index in labelsIndexes:
-                    labelsAux[labelsIndexes.index(index)] = pair[1]
-                elif index in catAttributesIndexes:
+                if index in catAttributesIndexes or index in labelsIndexes:
                     catAttributesAux[catAttributesIndexes.index(index)] = pair[1]
                 else:
-                    print(index)
                     numAttributesAux[numAttributesIndexes.index(index)] = float(pair[1])
             if len(catAttributesIndexes) > 0:
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
-            labels.append(labelsAux)
+            labels.append(0)    #Esto lo quiero quitar
         else:
             #Normal
             sparse = False
             catAttributesAux = []
             numAttributesAux = []
-            labelsAux = 0 if general else []
             values = line.split(',')
             for i in range(len(values)):
-                if i in labelsIndexes:
-                    labelsAux.append(values[i])
-                elif i in catAttributesIndexes:
+                if i in catAttributesIndexes or index in labelsIndexes:
                     catAttributesAux.append(values[i].replace('\n',''))
                 else:
                     numAttributesAux.append(float(values[i]))
@@ -134,14 +125,14 @@ def loadArff(arffPath, xmlPath, general):
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
-            labels.append(labelsAux)
+            labels.append(0)    #Esto lo quiero quitar
 
     #Transform lists of lists to numpy arrays
     numAttributesRet = np.array([np.array(xi) for xi in numAttributes]) if len(numAttributes) > 0 else None
     catAttributesRet = np.array([np.array(xi) for xi in catAttributes]) if len(catAttributes) > 0 else None
-    labelsRet = np.array(labels) if general else np.array([np.array(xi) for xi in labels])
+    labelsRet = np.array(labels)    #Esto lo quiero quitar
 
-    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes
+    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes, labelsIndexes
 
 
 def toArff(D, X_num, X_cat, num_instances, filename):
@@ -184,24 +175,78 @@ class Dataset:  #No se si añadir las propias etiquetas
     sparse: bool
     numIndexes: list
     catIndexes: list
+    labelIndexes: list
 
     @classmethod
-    def from_dir(cls, dir_: str, general: bool) -> 'Dataset':
+    def from_dir(cls, dir_: str, strategy: str):
+
         dir_ = Path(dir_)
         X_num = {}
         X_cat = {}
         y = {}
-        X_num['train'], X_cat['train'], y['train'], numLabels, header, sparse, numIndexes, catIndexes = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'), general)
-        return Dataset(
-            X_num,
-            X_cat,
-            y,
-            numLabels,
-            header,
-            sparse,
-            numIndexes,
-            catIndexes
-        )
+        X_num['train'], X_cat['train'], y['train'], numLabels, header, sparse, numIndexes, catIndexes, labelIndexes = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
+
+        D = Dataset(
+                X_num,
+                X_cat,
+                y,
+                numLabels,
+                header,
+                sparse,
+                numIndexes,
+                catIndexes,
+                labelIndexes
+            )
+
+        return [D] if strategy=="general" else D.get_minoritary_datasets()
+
+    def get_minoritary_labels(self):
+
+        labelCount = [0 for i in self.labelIndexes]
+
+        for instance in self.X_cat:
+            labelCount = [x + y for x, y in zip(labelCount, self.X_cat[instance][self.labelIndexes])]
+
+        mean = sum(labelCount)/len(labelCount)
+
+        minorityLabels = []
+
+        for i in range(len(labelCount)):
+            if labelCount[i] < mean:
+                minorityLabels.append((i, labelCount[i]))
+
+        return minorityLabels
+
+
+    def get_minoritary_datasets(self):
+
+        minorityLabels = self.get_minoritary_labels()
+        minoritaryIndexes = [[] for i in minorityLabels]
+        for i in self.X_cat.size():
+            for (j, n) in minorityLabels:
+                if self.X_cat[i][self.len(self.catIndexes) + j] == 1:
+                    minoritaryIndexes[j].append(i)
+
+        minoritaryDatasets = []
+        for l in minoritaryIndexes:
+            X_num = self.X_num[l]
+            X_cat = self.X_cat[l]
+            D = Dataset(
+                X_num,
+                X_cat,
+                [0 for i in X_cat.size()],
+                self.n_labels,
+                self.arffHeader,
+                self.sparse,
+                self.numIndexes,
+                self.catIndexes,
+                self.labelIndexes
+            )
+            minoritaryDatasets.append(D)
+
+        return minoritaryDatasets
+
+
 
     @property
     def n_num_features(self) -> int:

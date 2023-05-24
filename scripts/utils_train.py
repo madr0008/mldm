@@ -37,8 +37,9 @@ def concat_y_to_X(X, y):
 def make_dataset(
     data_path: str,
     T: lib.Transformations,
-    general: bool
+    strategy: str
 ):
-    D = lib.Dataset.from_dir(data_path, general)
+
+    D = lib.Dataset.from_dir(data_path, strategy)
     
     return lib.transform_dataset(D, T, None)

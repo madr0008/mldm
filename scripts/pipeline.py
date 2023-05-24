@@ -56,7 +56,6 @@ def main():
         **raw_config['diffusion_params'],
         parent_dir=raw_config['parent_dir'],
         real_data_path=raw_config['real_data_path'],
-        model_path=os.path.join(raw_config['parent_dir'], 'model.pt'),
         model_type=raw_config['model_type'],
         model_params=raw_config['model_params'],
         T_dict=raw_config['train']['T'],

@@ -100,56 +100,58 @@ def train(
 
     T = lib.Transformations(**T_dict)
 
-    dataset = make_dataset(
+    datasets = make_dataset(
         real_data_path,
         T,
-        strategy == "general"
+        strategy
     )
 
-    K = np.array(dataset.get_category_sizes('train'))
-    if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
-        K = np.array([0])
-    #print(K)
+    for i in range(len(datasets)):
 
-    num_numerical_features = dataset.X_num['train'].shape[1] if dataset.X_num is not None else 0
-    d_in = np.sum(K) + num_numerical_features
-    model_params['d_in'] = d_in
-    #print(d_in)
-    
-    #print(model_params)
-    model = get_model(
-        model_type,
-        model_params,
-        num_numerical_features,
-        category_sizes=dataset.get_category_sizes('train')
-    )
-    model.to(device)
+        dataset = datasets[i]
 
-    # train_loader = lib.prepare_beton_loader(dataset, split='train', batch_size=batch_size)
-    train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
+        K = np.array(dataset.get_category_sizes('train'))
+        if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
+            K = np.array([0])
 
-    diffusion = GaussianMultinomialDiffusion(
-        num_classes=K,
-        num_numerical_features=num_numerical_features,
-        denoise_fn=model,
-        gaussian_loss_type=gaussian_loss_type,
-        num_timesteps=num_timesteps,
-        scheduler=scheduler,
-        device=device
-    )
-    diffusion.to(device)
-    diffusion.train()
+        num_numerical_features = dataset.X_num['train'].shape[1] if dataset.X_num is not None else 0
+        d_in = np.sum(K) + num_numerical_features
+        model_params['d_in'] = d_in
 
-    trainer = Trainer(
-        diffusion,
-        train_loader,
-        lr=lr,
-        weight_decay=weight_decay,
-        steps=steps,
-        device=device
-    )
-    trainer.run_loop()
+        #print(model_params)
+        model = get_model(
+            model_type,
+            model_params,
+            num_numerical_features,
+            category_sizes=dataset.get_category_sizes('train')
+        )
+        model.to(device)
 
-    trainer.loss_history.to_csv(os.path.join(parent_dir, 'loss.csv'), index=False)
-    torch.save(diffusion._denoise_fn.state_dict(), os.path.join(parent_dir, 'model.pt'))
-    torch.save(trainer.ema_model.state_dict(), os.path.join(parent_dir, 'model_ema.pt'))
+        # train_loader = lib.prepare_beton_loader(dataset, split='train', batch_size=batch_size)
+        train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
+
+        diffusion = GaussianMultinomialDiffusion(
+            num_classes=K,
+            num_numerical_features=num_numerical_features,
+            denoise_fn=model,
+            gaussian_loss_type=gaussian_loss_type,
+            num_timesteps=num_timesteps,
+            scheduler=scheduler,
+            device=device
+        )
+        diffusion.to(device)
+        diffusion.train()
+
+        trainer = Trainer(
+            diffusion,
+            train_loader,
+            lr=lr,
+            weight_decay=weight_decay,
+            steps=steps,
+            device=device
+        )
+        trainer.run_loop()
+
+        trainer.loss_history.to_csv(os.path.join(parent_dir, 'loss.csv'), index=False)
+        torch.save(diffusion._denoise_fn.state_dict(), os.path.join(parent_dir, 'model_' + str(i) + '.pt'))
+        torch.save(trainer.ema_model.state_dict(), os.path.join(parent_dir, 'model_' + str(i) + '_ema.pt'))

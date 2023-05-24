@@ -23,7 +23,6 @@ def sample(
     sample_percentage = 0,
     model_type = 'mlp',
     model_params = None,
-    model_path = None,
     num_timesteps = 1000,
     gaussian_loss_type = 'mse',
     scheduler = 'cosine',
@@ -39,122 +38,113 @@ def sample(
     zero.improve_reproducibility(seed)
 
     T = lib.Transformations(**T_dict)
-    D = make_dataset(
+    datasets = make_dataset(
         real_data_path,
         T,
-        general
+        strategy
     )
 
-    num_samples = int(((sample_percentage * D.size()))/100)
-
-    K = np.array(D.get_category_sizes('train'))
-    if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
-        K = np.array([0])
-
-    num_numerical_features_ = D.X_num['train'].shape[1] if D.X_num is not None else 0
-    d_in = np.sum(K) + num_numerical_features_
-    model_params['d_in'] = int(d_in)
-    model = get_model(
-        model_type,
-        model_params,
-        num_numerical_features_,
-        category_sizes=D.get_category_sizes('train')
-    )
-
-    model.load_state_dict(
-        torch.load(model_path, map_location="cpu")
-    )
-
-    diffusion = GaussianMultinomialDiffusion(
-        K,
-        num_numerical_features=num_numerical_features_,
-        denoise_fn=model, num_timesteps=num_timesteps, 
-        gaussian_loss_type=gaussian_loss_type, scheduler=scheduler, device=device
-    )
-
-    diffusion.to(device)
-    diffusion.eval()
-    
-    _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
-    # empirical_class_dist = empirical_class_dist.float() + torch.tensor([-5000., 10000.]).float()
-    # if disbalance == 'fix':
-    #     empirical_class_dist[0], empirical_class_dist[1] = empirical_class_dist[1], empirical_class_dist[0]
-    #     x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, empirical_class_dist.float(), ddim=False)
-    #
-    # elif disbalance == 'fill':
-    #     ix_major = empirical_class_dist.argmax().item()
-    #     val_major = empirical_class_dist[ix_major].item()
-    #     x_gen, y_gen = [], []
-    #     for i in range(empirical_class_dist.shape[0]):
-    #         if i == ix_major:
-    #             continue
-    #         distrib = torch.zeros_like(empirical_class_dist)
-    #         distrib[i] = 1
-    #         num_samples = val_major - empirical_class_dist[i].item()
-    #         x_temp, y_temp = diffusion.sample_all(num_samples, batch_size, distrib.float(), ddim=False)
-    #         x_gen.append(x_temp)
-    #         y_gen.append(y_temp)
-    #
-    #     x_gen = torch.cat(x_gen, dim=0)
-    #     y_gen = torch.cat(y_gen, dim=0)
-    #
-    # else:
-    #     x_gen, y_gen = diffusion.sample_all(num_samples, batch_size, empirical_class_dist.float(), ddim=False)
-
-
-    if strategy == "general":
-        #sample all no, tengo que hacer una funcion distinta que haga el famoso bucle
-        x_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
-
-    # try:
-    # except FoundNANsError as ex:
-    #     print("Found NaNs during sampling!")
-    #     loader = lib.prepare_fast_dataloader(D, 'train', 8)
-    #     x_gen = next(loader)[0]
-    #     y_gen = torch.multinomial(
-    #         empirical_class_dist.float(),
-    #         num_samples=8,
-    #         replacement=True
-    #     )
-    X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
-
-    ###
-    # X_num_unnorm = X_gen[:, :num_numerical_features]
-    # lo = np.percentile(X_num_unnorm, 2.5, axis=0)
-    # hi = np.percentile(X_num_unnorm, 97.5, axis=0)
-    # idx = (lo < X_num_unnorm) & (hi > X_num_unnorm)
-    # X_gen = X_gen[np.all(idx, axis=1)]
-    # y_gen = y_gen[np.all(idx, axis=1)]
-    ###
-
-    num_numerical_features = num_numerical_features_
     D_aux = make_dataset(
         real_data_path,
         lib.Transformations(),
-        strategy == "general"
-    )
+        "general"
+    )[0]
 
-    X_num_ = X_gen
-    if num_numerical_features < X_gen.shape[1]:
-        # _, _, cat_encoder = lib.cat_encode({'train': X_cat_real}, T_dict['cat_encoding'], y_real, T_dict['seed'], True)
-        if T_dict['cat_encoding'] == 'one-hot':
-            X_gen[:, num_numerical_features:] = to_good_ohe(D.cat_transform.steps[0][1], X_num_[:, num_numerical_features:])
-        X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
-        X_cat = np.concatenate((D_aux.X_cat['train'], X_cat), axis=1)
+    if D_aux.numIndexes:
+        maxValuesBefore = D_aux.X_num['train'].max(axis=0)
 
-    if num_numerical_features_ != 0:
-        # _, normalize = lib.normalize({'train' : X_num_real}, T_dict['normalization'], T_dict['seed'], True)
-        X_num_ = D.num_transform.inverse_transform(X_gen[:, :num_numerical_features])
-        X_num = X_num_[:, :num_numerical_features]
+    minLabels = D_aux.get_minoritary_labels()
 
-        disc_cols = []
-        for col in range(D.X_num['train'].shape[1]):
-            uniq_vals = np.unique(D.X_num['train'][:, col])
-            if len(uniq_vals) <= 32 and ((uniq_vals - np.round(uniq_vals)) == 0).all():
-                disc_cols.append(col)
-        print("Discrete cols:", disc_cols)
-        if len(disc_cols):
-            X_num = round_columns(D.X_num['train'], X_num, disc_cols)
-        X_num = np.concatenate((D_aux.X_num['train'], X_num), axis=1)
+    X_num_total = D_aux.X_num['train']
+    X_cat_total = D_aux.X_cat['train']
 
-    toArff(D_aux, X_num, X_cat, num_samples + D_aux.size(), 'salida.arff')
+    for i in range(len(datasets)):
+
+        D = datasets[i]
+
+        num_samples = int(((sample_percentage * D.size()))/100)
+
+        K = np.array(D.get_category_sizes('train'))
+        if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
+            K = np.array([0])
+
+        num_numerical_features_ = D.X_num['train'].shape[1] if D.X_num is not None else 0
+        d_in = np.sum(K) + num_numerical_features_
+        model_params['d_in'] = int(d_in)
+        model = get_model(
+            model_type,
+            model_params,
+            num_numerical_features_,
+            category_sizes=D.get_category_sizes('train')
+        )
+
+        model.load_state_dict(
+            torch.load(os.path.join(parent_dir, 'model' + str(i) + '.pt'), map_location="cpu")
+        )
+
+        diffusion = GaussianMultinomialDiffusion(
+            K,
+            num_numerical_features=num_numerical_features_,
+            denoise_fn=model, num_timesteps=num_timesteps,
+            gaussian_loss_type=gaussian_loss_type, scheduler=scheduler, device=device
+        )
+
+        diffusion.to(device)
+        diffusion.eval()
+
+        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
+
+        if strategy == "general":
+            #sample all no, tengo que hacer una funcion distinta que haga el famoso bucle
+            x_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
+        else:
+            x_gen, y_gen = diffusion.sample_all(minLabels[i][1], batch_size, empirical_class_dist.float(), ddim=False)
+
+        X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
+
+        ###
+        # X_num_unnorm = X_gen[:, :num_numerical_features]
+        # lo = np.percentile(X_num_unnorm, 2.5, axis=0)
+        # hi = np.percentile(X_num_unnorm, 97.5, axis=0)
+        # idx = (lo < X_num_unnorm) & (hi > X_num_unnorm)
+        # X_gen = X_gen[np.all(idx, axis=1)]
+        # y_gen = y_gen[np.all(idx, axis=1)]
+        ###
+
+        num_numerical_features = num_numerical_features_
+
+        #ESTO TIENE QUE SER UN PARAMETRO
+        alFinal = True
+        quantile = False
+
+        X_num_ = X_gen
+        if num_numerical_features < X_gen.shape[1]:
+            # _, _, cat_encoder = lib.cat_encode({'train': X_cat_real}, T_dict['cat_encoding'], y_real, T_dict['seed'], True)
+            if T_dict['cat_encoding'] == 'one-hot':
+                X_gen[:, num_numerical_features:] = to_good_ohe(D.cat_transform.steps[0][1], X_num_[:, num_numerical_features:])
+            X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
+            X_cat_total = np.concatenate((X_cat_total, X_cat), axis=1)
+
+        if num_numerical_features_ != 0:
+            X_num_ = X_gen[:, :num_numerical_features]
+            if alFinal or quantile:
+                X_num_ = D.num_transform.inverse_transform(X_num_)
+            if not quantile:    #Y no se, quizas rentaria
+                maxValuesNow = X_num_.max(axis=0)
+                for col in range(num_numerical_features):
+                    for row in range(X_num_.size()):
+                        X_num_[row][col] = (X_num_[row][col]*maxValuesBefore[col])/maxValuesNow[col]
+            X_num = X_num_[:, :num_numerical_features]
+
+            disc_cols = []
+            for col in range(D.X_num['train'].shape[1]):
+                uniq_vals = np.unique(D.X_num['train'][:, col])
+                if len(uniq_vals) <= 32 and ((uniq_vals - np.round(uniq_vals)) == 0).all():
+                    disc_cols.append(col)
+            print("Discrete cols:", disc_cols)
+            if len(disc_cols):
+                X_num = round_columns(D.X_num['train'], X_num, disc_cols)
+            X_num_total = np.concatenate((X_num_total, X_num), axis=1)
+
+
+    toArff(D_aux, X_num_total, X_cat_total, X_num_total.size(), 'salida.arff')
