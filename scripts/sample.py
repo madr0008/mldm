@@ -56,8 +56,8 @@ def sample(
 
     minLabels = D_aux.get_minoritary_labels()
 
-    X_num_total = D_aux.X_num['train']
-    X_cat_total = D_aux.X_cat['train']
+    X_num_total = D_aux.X_num
+    X_cat_total = D_aux.X_cat
 
     for i in range(len(datasets)):
 
@@ -65,18 +65,18 @@ def sample(
 
         num_samples = int(((sample_percentage * D.size()))/100)
 
-        K = np.array(D.get_category_sizes('train'))
+        K = np.array(D.get_category_sizes())
         if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
             K = np.array([0])
 
-        num_numerical_features_ = D.X_num['train'].shape[1] if D.X_num is not None else 0
+        num_numerical_features_ = D.X_num.shape[1] if D.X_num is not None else 0
         d_in = np.sum(K) + num_numerical_features_
         model_params['d_in'] = int(d_in)
         model = get_model(
             model_type,
             model_params,
             num_numerical_features_,
-            category_sizes=D.get_category_sizes('train')
+            category_sizes=D.get_category_sizes()
         )
 
         model.load_state_dict(
@@ -93,7 +93,7 @@ def sample(
         diffusion.to(device)
         diffusion.eval()
 
-        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
+        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y, return_counts=True)
 
         if strategy == "general":
             X_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
@@ -117,7 +117,6 @@ def sample(
 
         X_num_ = X_gen
         if num_numerical_features < X_gen.shape[1]:
-            # _, _, cat_encoder = lib.cat_encode({'train': X_cat_real}, T_dict['cat_encoding'], y_real, T_dict['seed'], True)
             if T_dict['cat_encoding'] == 'one-hot':
                 X_gen[:, num_numerical_features:] = to_good_ohe(D.cat_transform.steps[0][1], X_num_[:, num_numerical_features:])
             X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
@@ -129,19 +128,19 @@ def sample(
                 X_num_ = D.num_transform.inverse_transform(X_num_)
             if not quantile:    #Y no se, quizas rentaria
                 for col in range(num_numerical_features):
-                    scaler = MinMaxScaler(feature_range=(D_aux.X_num['train'].min(axis=0)[col], D_aux.X_num['train'].max(axis=0)[col]))
+                    scaler = MinMaxScaler(feature_range=(D_aux.X_num.min(axis=0)[col], D_aux.X_num.max(axis=0)[col]))
                     scaler.fit(X_num_[:,col].reshape(-1, 1))
                     X_num_[:,col] = scaler.transform(X_num_[:,col].reshape(-1, 1)).flatten()
             X_num = X_num_[:, :num_numerical_features]
 
             disc_cols = []
-            for col in range(D.X_num['train'].shape[1]):
-                uniq_vals = np.unique(D.X_num['train'][:, col])
+            for col in range(D.X_num.shape[1]):
+                uniq_vals = np.unique(D.X_num[:, col])
                 if len(uniq_vals) <= 32 and ((uniq_vals - np.round(uniq_vals)) == 0).all():
                     disc_cols.append(col)
             print("Discrete cols:", disc_cols)
             if len(disc_cols):
-                X_num = round_columns(D.X_num['train'], X_num, disc_cols)
+                X_num = round_columns(D.X_num, X_num, disc_cols)
             X_num_total = np.concatenate((X_num_total, X_num), axis=0)
 
 

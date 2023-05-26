@@ -9,7 +9,7 @@ def get_model(
     n_num_features,
     category_sizes
 ): 
-    #print(model_name)
+
     if model_name == 'mlp':
         model = MLPDiffusion(**model_params)
     elif model_name == 'resnet':

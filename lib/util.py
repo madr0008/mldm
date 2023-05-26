@@ -28,39 +28,12 @@ Report = Dict[str, Any]
 T = TypeVar('T')
 
 
-class Part(enum.Enum):
-    TRAIN = 'train'
-    VAL = 'val'
-    TEST = 'test'
-
-    def __str__(self) -> str:
-        return self.value
-
-
 class Timer(zero.Timer):
     @classmethod
     def launch(cls) -> 'Timer':
         timer = cls()
         timer.run()
         return timer
-
-
-def update_training_log(training_log, data, metrics):
-    def _update(log_part, data_part):
-        for k, v in data_part.items():
-            if isinstance(v, dict):
-                _update(log_part.setdefault(k, {}), v)
-            elif isinstance(v, list):
-                log_part.setdefault(k, []).extend(v)
-            else:
-                log_part.setdefault(k, []).append(v)
-
-    _update(training_log, data)
-    transposed_metrics = {}
-    for part, part_metrics in metrics.items():
-        for metric_name, value in part_metrics.items():
-            transposed_metrics.setdefault(metric_name, {})[part] = value
-    _update(training_log, transposed_metrics)
 
 
 def raise_unknown(unknown_what: str, unknown_value: Any):

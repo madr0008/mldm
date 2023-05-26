@@ -22,9 +22,6 @@ from scipy.spatial.distance import cdist
 from . import env, util
 from .util import load_json
 
-ArrayDict = Dict[str, np.ndarray]
-TensorDict = Dict[str, torch.Tensor]
-
 
 CAT_MISSING_VALUE = '__nan__'
 CAT_RARE_VALUE = '__rare__'
@@ -166,10 +163,10 @@ def toArff(D, X_num, X_cat, num_instances, filename):
 
 
 @dataclass(frozen=False)
-class Dataset:  #No se si añadir las propias etiquetas
-    X_num: Optional[ArrayDict]
-    X_cat: Optional[ArrayDict]
-    y: ArrayDict
+class Dataset:
+    X_num: np.ndarray
+    X_cat: np.ndarray
+    y: np.ndarray
     n_labels: Optional[int]
     arffHeader: str
     sparse: bool
@@ -181,10 +178,7 @@ class Dataset:  #No se si añadir las propias etiquetas
     def from_dir(cls, dir_: str, strategy: str):
 
         dir_ = Path(dir_)
-        X_num = {}
-        X_cat = {}
-        y = {}
-        X_num['train'], X_cat['train'], y['train'], numLabels, header, sparse, numIndexes, catIndexes, labelIndexes = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
+        X_num, X_cat, y, numLabels, header, sparse, numIndexes, catIndexes, labelIndexes = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
 
         D = Dataset(
                 X_num,
@@ -211,14 +205,14 @@ class Dataset:  #No se si añadir las propias etiquetas
 
         labelCount = [0] * self.n_labels
 
-        for instance in self.X_cat['train']:
+        for instance in self.X_cat:
             for label in range(len(labelCount)):
                 labelCount[label] += int(instance[-(self.n_labels - label)])
 
         IRlbl = []
 
         for count in labelCount:
-            IRlbl.append(((self.X_cat['train'].shape[0]/count) - 1))
+            IRlbl.append(((self.X_cat.shape[0]/count) - 1))
 
         meanIR = sum(IRlbl)/len(IRlbl)
 
@@ -235,9 +229,9 @@ class Dataset:  #No se si añadir las propias etiquetas
 
         minoritaryLabels = self.get_minoritary_labels()[:int(self.n_labels)*pct]
         minoritaryIndexes = dict((str(j), []) for (j, n) in minoritaryLabels)
-        for i in range(self.X_cat['train'].shape[0]):
+        for i in range(self.X_cat.shape[0]):
             for (j, n) in minoritaryLabels:
-                if int(self.X_cat['train'][i][-(self.n_labels - j)]) == 1:
+                if int(self.X_cat[i][-(self.n_labels - j)]) == 1:
                     minoritaryIndexes[str(j)].append(i)
         return minoritaryIndexes
 
@@ -249,8 +243,8 @@ class Dataset:  #No se si añadir las propias etiquetas
 
         minoritaryDatasets = []
         for j, l in minoritaryIndexes.items():
-            X_num = np.take(self.X_num['train'], l, axis=0)
-            X_cat = np.take(self.X_cat['train'], l, axis=0)
+            X_num = np.take(self.X_num, l, axis=0)
+            X_cat = np.take(self.X_cat, l, axis=0)
             D = Dataset(
                 {'train': X_num},
                 {'train': X_cat},
@@ -279,8 +273,8 @@ class Dataset:  #No se si añadir las propias etiquetas
                 if index not in indexes:
                     indexes.append(index)
 
-        X_num = np.take(self.X_num['train'], indexes, axis=0)
-        X_cat = np.take(self.X_cat['train'], indexes, axis=0)
+        X_num = np.take(self.X_num, indexes, axis=0)
+        X_cat = np.take(self.X_cat, indexes, axis=0)
         D = Dataset(
             {'train': X_num},
             {'train': X_cat},
@@ -298,32 +292,32 @@ class Dataset:  #No se si añadir las propias etiquetas
 
     @property
     def n_num_features(self) -> int:
-        return 0 if self.X_num is None else self.X_num['train'].shape[1]
+        return 0 if self.X_num is None else self.X_num.shape[1]
 
     @property
     def n_cat_features(self) -> int:
-        return 0 if self.X_cat is None else self.X_cat['train'].shape[1]
+        return 0 if self.X_cat is None else self.X_cat.shape[1]
 
     @property
     def n_features(self) -> int:
         return self.n_num_features + self.n_cat_features
 
     def size(self) -> int:
-        return len(self.y['train'])
+        return len(self.y)
 
     @property
     def nn_output_dim(self) -> int:
         return self.n_labels
 
-    def get_category_sizes(self, part: str) -> List[int]:
-        return [] if self.X_cat is None else get_category_sizes(self.X_cat[part])
+    def get_category_sizes(self) -> List[int]:
+        return [] if self.X_cat is None else get_category_sizes(self.X_cat)
 
 
 # Inspired by: https://github.com/yandex-research/rtdl/blob/a4c93a32b334ef55d2a0559a4407c8306ffeeaee/lib/data.py#L20
 def normalize(
-    X: ArrayDict, normalization: Normalization, seed: Optional[int], return_normalizer : bool = False
-) -> ArrayDict:
-    X_train = X['train']
+    X: np.ndarray, normalization: Normalization, seed: Optional[int], return_normalizer : bool = False
+) -> np.ndarray:
+    X_train = X
     if normalization == 'standard':
         normalizer = sklearn.preprocessing.StandardScaler()
     elif normalization == 'minmax':
@@ -331,7 +325,7 @@ def normalize(
     elif normalization == 'quantile':
         normalizer = sklearn.preprocessing.QuantileTransformer(
             output_distribution='normal',
-            n_quantiles=max(min(X['train'].shape[0] // 30, 1000), 10),
+            n_quantiles=max(min(X.shape[0] // 30, 1000), 10),
             subsample=1e9,
             random_state=seed,
         )
@@ -347,17 +341,17 @@ def normalize(
         util.raise_unknown('normalization', normalization)
     normalizer.fit(X_train)
     if return_normalizer:
-        return {k: normalizer.transform(v) for k, v in X.items()}, normalizer
-    return {k: normalizer.transform(v) for k, v in X.items()}
+        return normalizer.transform(X), normalizer
+    return normalizer.transform(X)
 
 
 def cat_encode(
-    X: ArrayDict,
+    X: np.ndarray,
     encoding: Optional[CatEncoding],
     y_train: Optional[np.ndarray],
     seed: Optional[int],
     return_encoder : bool = False
-) -> Tuple[ArrayDict, bool, Optional[Any]]:  # (X, is_converted_to_numerical)
+) -> Tuple[np.ndarray, bool, Optional[Any]]:  # (X, is_converted_to_numerical)
     if encoding != 'counter':
         y_train = None
 
@@ -369,17 +363,15 @@ def cat_encode(
             handle_unknown='use_encoded_value',  # type: ignore[code]
             unknown_value=unknown_value,  # type: ignore[code]
             dtype='int64',  # type: ignore[code]
-        ).fit(X['train'])
+        ).fit(X)
         encoder = make_pipeline(oe)
-        encoder.fit(X['train'])
-        X = {k: encoder.transform(v) for k, v in X.items()}
-        max_values = X['train'].max(axis=0)
-        for part in X.keys():
-            if part == 'train': continue
-            for column_idx in range(X[part].shape[1]):
-                X[part][X[part][:, column_idx] == unknown_value, column_idx] = (
-                    max_values[column_idx] + 1
-                )
+        encoder.fit(X)
+        X = encoder.transform(X)
+        max_values = X.max(axis=0)
+        for column_idx in range(X.shape[1]):
+            X[X[:, column_idx] == unknown_value, column_idx] = (
+                max_values[column_idx] + 1
+            )
         if return_encoder:
             return (X, False, encoder)
         return (X, False)
@@ -393,17 +385,17 @@ def cat_encode(
         encoder = make_pipeline(ohe)
 
         # encoder.steps.append(('ohe', ohe))
-        encoder.fit(X['train'])
-        X = {k: encoder.transform(v) for k, v in X.items()}
+        encoder.fit(X)
+        X = encoder.transform(X)
     elif encoding == 'counter':
         assert y_train is not None
         assert seed is not None
         loe = LeaveOneOutEncoder(sigma=0.1, random_state=seed, return_df=False)
         encoder.steps.append(('loe', loe))
-        encoder.fit(X['train'], y_train)
-        X = {k: encoder.transform(v).astype('float32') for k, v in X.items()}  # type: ignore[code]
-        if not isinstance(X['train'], pd.DataFrame):
-            X = {k: v.values for k, v in X.items()}  # type: ignore[code]
+        encoder.fit(X, y_train)
+        X = encoder.transform(X)
+        if not isinstance(X, pd.DataFrame):
+            X = X.values()
     else:
         util.raise_unknown('encoding', encoding)
     
@@ -469,7 +461,7 @@ def transform_dataset(
         X_cat, is_num, cat_transform = cat_encode(
             dataset.X_cat,
             transformations.cat_encoding,
-            dataset.y['train'],
+            dataset.y,
             transformations.seed,
             return_encoder=True
         )
@@ -504,20 +496,20 @@ def build_dataset(
 
 def prepare_tensors(
     dataset: Dataset, device: Union[str, torch.device]
-) -> Tuple[Optional[TensorDict], Optional[TensorDict], TensorDict]:
+) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], torch.Tensor]:
     X_num, X_cat, Y = (
-        None if x is None else {k: torch.as_tensor(v) for k, v in x.items()}
+        None if x is None else torch.as_tensor(x)
         for x in [dataset.X_num, dataset.X_cat, dataset.y]
     )
     if device.type != 'cpu':
         X_num, X_cat, Y = (
-            None if x is None else {k: v.to(device) for k, v in x.items()}
+            None if x is None else x.to(device)
             for x in [X_num, X_cat, Y]
         )
     assert X_num is not None
     assert Y is not None
     if not dataset.is_multiclass:
-        Y = {k: v.float() for k, v in Y.items()}
+        Y = Y.float()
     return X_num, X_cat, Y
 
 ###############
@@ -526,16 +518,16 @@ def prepare_tensors(
 
 class TabDataset(torch.utils.data.Dataset):
     def __init__(
-        self, dataset : Dataset, split : Literal['train']
+        self, dataset : Dataset
     ):
         super().__init__()
-        
-        self.X_num = torch.from_numpy(dataset.X_num[split]) if dataset.X_num is not None else None
-        self.X_cat = torch.from_numpy(dataset.X_cat[split]) if dataset.X_cat is not None else None
-        self.y = torch.from_numpy(dataset.y[split])
+
+        self.X_num = torch.from_numpy(dataset.X_num) if dataset.X_num is not None else None
+        self.X_cat = torch.from_numpy(dataset.X_cat) if dataset.X_cat is not None else None
+        self.y = torch.from_numpy(dataset.y)
 
         assert self.y is not None
-        assert self.X_num is not None or self.X_cat is not None 
+        assert self.X_num is not None or self.X_cat is not None
 
     def __len__(self):
         return len(self.y)
@@ -554,15 +546,14 @@ class TabDataset(torch.utils.data.Dataset):
 
 def prepare_dataloader(
     dataset : Dataset,
-    split : str,
     batch_size: int,
 ):
 
-    torch_dataset = TabDataset(dataset, split)
+    torch_dataset = TabDataset(dataset)
     loader = torch.utils.data.DataLoader(
         torch_dataset,
         batch_size=batch_size,
-        shuffle=(split == 'train'),
+        shuffle=True,
         num_workers=1,
     )
     while True:
@@ -570,30 +561,14 @@ def prepare_dataloader(
 
 def prepare_torch_dataloader(
     dataset : Dataset,
-    split : str,
     shuffle : bool,
     batch_size: int,
 ) -> torch.utils.data.DataLoader:
 
-    torch_dataset = TabDataset(dataset, split)
+    torch_dataset = TabDataset(dataset)
     loader = torch.utils.data.DataLoader(torch_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=1)
 
     return loader
-
-def dataset_from_csv(paths : Dict[str, str], cat_features, target, T):
-    assert 'train' in paths
-    y = {}
-    X_num = {}
-    X_cat = {} if len(cat_features) else None
-    for split in paths.keys():
-        df = pd.read_csv(paths[split])
-        y[split] = df[target].to_numpy().astype(float)
-        if X_cat is not None:
-            X_cat[split] = df[cat_features].to_numpy().astype(str)
-        X_num[split] = df.drop(cat_features + [target], axis=1).to_numpy().astype(float)
-
-    dataset = Dataset(X_num, X_cat, y, {}, None, len(np.unique(y['train'])))
-    return transform_dataset(dataset, T, None)
 
 class FastTensorDataLoader:
     """
@@ -642,32 +617,30 @@ class FastTensorDataLoader:
 
 def prepare_fast_dataloader(
     D : Dataset,
-    split : str,
     batch_size: int
 ):
     if D.X_cat is not None:
         if D.X_num is not None:
-            X = torch.from_numpy(np.concatenate([D.X_num[split], D.X_cat[split]], axis=1)).float()
+            X = torch.from_numpy(np.concatenate([D.X_num, D.X_cat], axis=1)).float()
         else:
-            X = torch.from_numpy(D.X_cat[split]).float()
+            X = torch.from_numpy(D.X_cat).float()
     else:
-        X = torch.from_numpy(D.X_num[split]).float()
-    y = torch.from_numpy(D.y[split])
-    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=(split=='train'))
+        X = torch.from_numpy(D.X_num).float()
+    y = torch.from_numpy(D.y)
+    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=True)
     while True:
         yield from dataloader
 
 def prepare_fast_torch_dataloader(
     D : Dataset,
-    split : str,
     batch_size: int
 ):
     if D.X_cat is not None:
-        X = torch.from_numpy(np.concatenate([D.X_num[split], D.X_cat[split]], axis=1)).float()
+        X = torch.from_numpy(np.concatenate([D.X_num, D.X_cat], axis=1)).float()
     else:
-        X = torch.from_numpy(D.X_num[split]).float()
-    y = torch.from_numpy(D.y[split])
-    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=(split=='train'))
+        X = torch.from_numpy(D.X_num).float()
+    y = torch.from_numpy(D.y)
+    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=True)
     return dataloader
 
 def round_columns(X_real, X_synth, columns):
@@ -680,24 +653,21 @@ def round_columns(X_real, X_synth, columns):
 def concat_features(D : Dataset):
     if D.X_num is None:
         assert D.X_cat is not None
-        X = {k: pd.DataFrame(v, columns=range(D.n_features)) for k, v in D.X_cat.items()}
+        X = pd.DataFrame(D.X_cat, columns=range(D.n_features))
     elif D.X_cat is None:
         assert D.X_num is not None
-        X = {k: pd.DataFrame(v, columns=range(D.n_features)) for k, v in D.X_num.items()}
+        X = pd.DataFrame(D.X_num, columns=range(D.n_features))
     else:
-        X = {
-            part: pd.concat(
+        X = pd.concat(
                 [
-                    pd.DataFrame(D.X_num[part], columns=range(D.n_num_features)),
+                    pd.DataFrame(D.X_num, columns=range(D.n_num_features)),
                     pd.DataFrame(
-                        D.X_cat[part],
+                        D.X_cat,
                         columns=range(D.n_num_features, D.n_features),
                     ),
                 ],
                 axis=1,
             )
-            for part in D.y.keys()
-        }
 
     return X
 
@@ -717,43 +687,3 @@ def concat_to_pd(X_num, X_cat, y):
             pd.DataFrame(X_num, columns=list(range(X_num.shape[1]))),
             pd.DataFrame(y, columns=['y'])
         ], axis=1)
-
-def read_pure_data(path, split='train'):
-    y = np.load(os.path.join(path, f'y_{split}.npy'), allow_pickle=True)
-    X_num = None
-    X_cat = None
-    if os.path.exists(os.path.join(path, f'X_num_{split}.npy')):
-        X_num = np.load(os.path.join(path, f'X_num_{split}.npy'), allow_pickle=True)
-    if os.path.exists(os.path.join(path, f'X_cat_{split}.npy')):
-        X_cat = np.load(os.path.join(path, f'X_cat_{split}.npy'), allow_pickle=True)
-
-    return X_num, X_cat, y
-
-def read_changed_val(path, val_size=0.2):
-    path = Path(path)
-    X_num, X_cat, y = read_pure_data(path, 'train')
-
-    ixs = np.arange(y.shape[0])
-    train_ixs, val_ixs = train_test_split(ixs, test_size=val_size, random_state=777, stratify=y)
-    y_train = y[train_ixs]
-    y_val = y[val_ixs]
-
-    if X_num is not None:
-        X_num_train = X_num[train_ixs]
-        X_num_val = X_num[val_ixs]
-
-    if X_cat is not None:
-        X_cat_train = X_cat[train_ixs]
-        X_cat_val = X_cat[val_ixs]
-    
-    return X_num_train, X_cat_train, y_train, X_num_val, X_cat_val, y_val
-
-#############
-
-def load_dataset_info(dataset_dir_name: str) -> Dict[str, Any]:
-    path = Path("data/" + dataset_dir_name)
-    info = util.load_json(path / 'info.json')
-    info['size'] = info['train_size'] + info['val_size'] + info['test_size']
-    info['n_features'] = info['n_num_features'] + info['n_cat_features']
-    info['path'] = path
-    return info

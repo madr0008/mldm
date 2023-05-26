@@ -110,11 +110,11 @@ def train(
 
         dataset = datasets[i]
 
-        K = np.array(dataset.get_category_sizes('train'))
+        K = np.array(dataset.get_category_sizes()
         if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
             K = np.array([0])
 
-        num_numerical_features = dataset.X_num['train'].shape[1] if dataset.X_num is not None else 0
+        num_numerical_features = dataset.X_num.shape[1] if dataset.X_num is not None else 0
         d_in = np.sum(K) + num_numerical_features
         model_params['d_in'] = d_in
 
@@ -123,12 +123,11 @@ def train(
             model_type,
             model_params,
             num_numerical_features,
-            category_sizes=dataset.get_category_sizes('train')
+            category_sizes=dataset.get_category_sizes()
         )
         model.to(device)
 
-        # train_loader = lib.prepare_beton_loader(dataset, split='train', batch_size=batch_size)
-        train_loader = lib.prepare_fast_dataloader(dataset, split='train', batch_size=batch_size)
+        train_loader = lib.prepare_fast_dataloader(dataset, batch_size=batch_size)
 
         diffusion = GaussianMultinomialDiffusion(
             num_classes=K,
