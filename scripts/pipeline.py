@@ -47,7 +47,8 @@ def main():
         model_params=raw_config['model_params'],
         T_dict=raw_config['train']['T'],
         device=device,
-        strategy=raw_config['sample']['strategy']
+        strategy=raw_config['sample']['strategy'],
+        label_percentage=raw_config['sample']['label_percentage']
     )
     sample(
         sample_percentage=raw_config['sample']['sample_percentage'],
@@ -63,6 +64,7 @@ def main():
         seed=raw_config['sample'].get('seed', 0),
         change_val=False, #Meter en config
         strategy = raw_config['sample']['strategy'],
+        label_percentage=raw_config['sample']['label_percentage'],
         max_iter = raw_config['sample']['max_iterations']
     )
 

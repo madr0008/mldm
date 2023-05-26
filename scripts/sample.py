@@ -34,6 +34,7 @@ def sample(
     seed = 0,
     change_val = False,
     strategy = "general",
+    label_percentage=50,
     max_iter = 1000
 ):
     zero.improve_reproducibility(seed)
@@ -42,17 +43,16 @@ def sample(
     datasets = make_dataset(
         real_data_path,
         T,
-        strategy
+        strategy,
+        label_percentage
     )
 
     D_aux = make_dataset(
         real_data_path,
         lib.Transformations(),
-        "general"
+        "general",
+        0
     )[0]
-
-    if D_aux.numIndexes:
-        maxValuesBefore = D_aux.X_num['train'].max(axis=0)
 
     minLabels = D_aux.get_minoritary_labels()
 
@@ -96,7 +96,6 @@ def sample(
         _, empirical_class_dist = torch.unique(torch.from_numpy(D.y['train']), return_counts=True)
 
         if strategy == "general":
-            #sample all no, tengo que hacer una funcion distinta que haga el famoso bucle
             X_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
         else:
             X_gen, y_gen = diffusion.sample_all(minLabels[i][1], batch_size, empirical_class_dist.float(), ddim=False)

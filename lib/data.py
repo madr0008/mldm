@@ -198,8 +198,15 @@ class Dataset:  #No se si añadir las propias etiquetas
                 labelIndexes
             )
 
-        return [D] if strategy=="general" else D.get_minoritary_datasets()
+        if strategy == "general":
+            return [D]
+        elif strategy == "specific":
+            return D.get_minoritary_datasets()
+        else:
+            return [D.get_minoritary_dataset()]
 
+
+    #Returns the labels with a IR below MeanIR (not yet though)
     def get_minoritary_labels(self):
 
         labelCount = [0] * self.n_labels
@@ -208,25 +215,37 @@ class Dataset:  #No se si añadir las propias etiquetas
             for label in range(len(labelCount)):
                 labelCount[label] += int(instance[-(self.n_labels - label)])
 
-        mean = sum(labelCount)/len(labelCount)
+        IRlbl = []
+
+        for count in labelCount:
+            IRlbl.append(((self.X_cat['train'].shape[0]/count) - 1))
+
+        meanIR = sum(IRlbl)/len(IRlbl)
 
         minoritaryLabels = []
 
-        for i in range(len(labelCount)):
-            if labelCount[i] < mean:
+        for i in range(len(IRlbl)):
+            if IRlbl[i] < meanIR:
                 minoritaryLabels.append((i, labelCount[i]))
 
-        return minoritaryLabels
+        return sorted(minoritaryLabels, key=lambda x: x[1])
 
 
-    def get_minoritary_datasets(self):
+    def get_minoritary_instances(self, pct):
 
-        minoritaryLabels = self.get_minoritary_labels()
-        minoritaryIndexes = dict((str(j),[]) for (j, n) in minoritaryLabels)
+        minoritaryLabels = self.get_minoritary_labels()[:int(self.n_labels)*pct]
+        minoritaryIndexes = dict((str(j), []) for (j, n) in minoritaryLabels)
         for i in range(self.X_cat['train'].shape[0]):
             for (j, n) in minoritaryLabels:
                 if int(self.X_cat['train'][i][-(self.n_labels - j)]) == 1:
                     minoritaryIndexes[str(j)].append(i)
+        return minoritaryIndexes
+
+
+    #Returns a list of datasets, each one with instances with minoritary labels
+    def get_minoritary_datasets(self, pct):
+
+        minoritaryIndexes = self.get_minoritary_instances(pct)
 
         minoritaryDatasets = []
         for j, l in minoritaryIndexes.items():
@@ -247,6 +266,34 @@ class Dataset:  #No se si añadir las propias etiquetas
 
         return minoritaryDatasets
 
+
+    #Returns a dataset with instances with minoritary labels
+    def get_minoritary_dataset(self, pct):
+
+        minoritaryIndexes = self.get_minoritary_instances(pct)
+
+        indexes = []
+
+        for j, l in minoritaryIndexes.items():
+            for index in l:
+                if index not in indexes:
+                    indexes.append(index)
+
+        X_num = np.take(self.X_num['train'], indexes, axis=0)
+        X_cat = np.take(self.X_cat['train'], indexes, axis=0)
+        D = Dataset(
+            {'train': X_num},
+            {'train': X_cat},
+            {'train' : np.array(([0] * X_cat.shape[0]))},
+            self.n_labels,
+            self.arffHeader,
+            self.sparse,
+            self.numIndexes,
+            self.catIndexes,
+            self.labelIndexes
+        )
+
+        return D
 
 
     @property

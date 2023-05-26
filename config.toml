@@ -1,0 +1,36 @@
+seed = 0
+parent_dir = "../datasets/birds"
+real_data_path = "../datasets/birds/birds"
+model_type = "mlp"
+device = "cuda:0"
+
+[model_params.rtdl_params]
+d_layers = [
+    256,
+    256,
+]
+dropout = 0.0
+
+[diffusion_params]
+num_timesteps = 1000
+gaussian_loss_type = "mse"
+scheduler = "cosine"
+
+[train.main]
+steps = 1000
+lr = 0.001
+weight_decay = 1e-05
+batch_size = 4096
+
+[train.T]
+seed = 0
+normalization = "quantile"
+cat_encoding = "__none__"
+
+[sample]
+sample_percentage = 25
+strategy = "mixed"
+label_percentage = 50
+max_iterations = 10000
+batch_size = 1000
+seed = 0

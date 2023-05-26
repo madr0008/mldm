@@ -89,6 +89,7 @@ def train(
     T_dict = None,
     device = torch.device('cuda:1'),
     strategy="general",
+    label_percentage=50,
     seed = 0,
 ):
     real_data_path = os.path.normpath(real_data_path)
@@ -101,7 +102,8 @@ def train(
     datasets = make_dataset(
         real_data_path,
         T,
-        strategy
+        strategy,
+        label_percentage
     )
 
     for i in range(len(datasets)):
