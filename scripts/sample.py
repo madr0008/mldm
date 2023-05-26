@@ -5,6 +5,7 @@ import os
 from tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset
 from lib import round_columns, toArff
+from sklearn.preprocessing import MinMaxScaler
 import lib
 
 def to_good_ohe(ohe, X):
@@ -79,7 +80,7 @@ def sample(
         )
 
         model.load_state_dict(
-            torch.load(os.path.join(parent_dir, 'model' + str(i) + '.pt'), map_location="cpu")
+            torch.load(os.path.join(parent_dir, 'model_' + str(i) + '.pt'), map_location="cpu")
         )
 
         diffusion = GaussianMultinomialDiffusion(
@@ -96,11 +97,9 @@ def sample(
 
         if strategy == "general":
             #sample all no, tengo que hacer una funcion distinta que haga el famoso bucle
-            x_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
+            X_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
         else:
-            x_gen, y_gen = diffusion.sample_all(minLabels[i][1], batch_size, empirical_class_dist.float(), ddim=False)
-
-        X_gen, y_gen = x_gen.numpy(), y_gen.numpy()
+            X_gen, y_gen = diffusion.sample_all(minLabels[i][1], batch_size, empirical_class_dist.float(), ddim=False)
 
         ###
         # X_num_unnorm = X_gen[:, :num_numerical_features]
@@ -123,17 +122,17 @@ def sample(
             if T_dict['cat_encoding'] == 'one-hot':
                 X_gen[:, num_numerical_features:] = to_good_ohe(D.cat_transform.steps[0][1], X_num_[:, num_numerical_features:])
             X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
-            X_cat_total = np.concatenate((X_cat_total, X_cat), axis=1)
+            X_cat_total = np.concatenate((X_cat_total, X_cat), axis=0)
 
         if num_numerical_features_ != 0:
             X_num_ = X_gen[:, :num_numerical_features]
             if alFinal or quantile:
                 X_num_ = D.num_transform.inverse_transform(X_num_)
             if not quantile:    #Y no se, quizas rentaria
-                maxValuesNow = X_num_.max(axis=0)
                 for col in range(num_numerical_features):
-                    for row in range(X_num_.size()):
-                        X_num_[row][col] = (X_num_[row][col]*maxValuesBefore[col])/maxValuesNow[col]
+                    scaler = MinMaxScaler(feature_range=(D_aux.X_num['train'].min(axis=0)[col], D_aux.X_num['train'].max(axis=0)[col]))
+                    scaler.fit(X_num_[:,col].reshape(-1, 1))
+                    X_num_[:,col] = scaler.transform(X_num_[:,col].reshape(-1, 1)).flatten()
             X_num = X_num_[:, :num_numerical_features]
 
             disc_cols = []
@@ -144,7 +143,7 @@ def sample(
             print("Discrete cols:", disc_cols)
             if len(disc_cols):
                 X_num = round_columns(D.X_num['train'], X_num, disc_cols)
-            X_num_total = np.concatenate((X_num_total, X_num), axis=1)
+            X_num_total = np.concatenate((X_num_total, X_num), axis=0)
 
 
-    toArff(D_aux, X_num_total, X_cat_total, X_num_total.size(), 'salida.arff')
+    toArff(D_aux, X_num_total, X_cat_total, X_num_total.shape[0], 'salida.arff')

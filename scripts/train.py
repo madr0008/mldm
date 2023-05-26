@@ -94,8 +94,6 @@ def train(
     real_data_path = os.path.normpath(real_data_path)
     parent_dir = os.path.normpath(parent_dir)
 
-    #EN ESTE MOMENTO, if strategy == "general", LO DE ABAJO. else, ENTRENAR DISTINTOS CLASIFICADORES Y TAL
-
     zero.improve_reproducibility(seed)
 
     T = lib.Transformations(**T_dict)

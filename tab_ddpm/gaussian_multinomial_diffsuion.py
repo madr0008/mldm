@@ -990,7 +990,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         x_gen = torch.cat(all_samples, dim=0)[:num_samples]
         y_gen = torch.cat(all_y, dim=0)[:num_samples]
 
-        return x_gen, y_gen
+        return x_gen.numpy(), y_gen.numpy()
 
     def sample_loop(self, num_samples, max_iter, batch_size, y_dist, D, ddim=False):
         if ddim:
@@ -1005,7 +1005,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         all_samples = []
         num_generated = 0
         num_valid = 0
-        while num_valid > num_samples and num_generated < max_iter:
+        minLabels = D.get_minoritary_labels()
+        newMinLabels = [0] * len(minLabels)
+
+        while num_valid < num_samples and num_generated < max_iter:
             sample, out_dict = sample_fn(b, y_dist)
             mask_nan = torch.any(sample.isnan(), dim=1)
             sample = sample[~mask_nan]
@@ -1014,16 +1017,20 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                 raise FoundNANsError
             num_generated += sample.shape[0]
 
-            #AQUI SOLO COMPRUEBA SI PERTENECE A MINORITARIA Y ESTAMOS CHILL
-            labelIndexes = D[D.n_labels:]
             for i in range(b):
-                for j in labelIndexes:  #En realidad, seria minoritarios
-                    if sample[i][j] == 1:
-                        all_samples.append(sample[i])
-                        all_y.append(out_dict['y'][i].cpu())
+                for k in range(len(minLabels)):
+                    (j, n) = minLabels[k]
+                    if int(sample[i][-(D.n_labels - j)].item()) == 1:
+                        all_samples.append(sample[i].tolist())
+                        all_y.append(out_dict['y'].cpu())
+                        newMinLabels[k] += 1
+                        num_valid += 1
+                        if newMinLabels[k] >= n:
+                            minLabels.pop(k)
+                        break
+                if num_valid >= num_samples:
+                    break
 
+        print(str(num_valid) + "/" + str(num_samples) + " " + str(num_generated) + "/" + str(max_iter))
 
-        x_gen = torch.cat(all_samples, dim=0)[:num_samples]
-        y_gen = torch.cat(all_y, dim=0)[:num_samples]
-
-        return x_gen, y_gen
+        return np.array(all_samples), torch.cat(all_y, dim=0)[:num_samples].numpy()

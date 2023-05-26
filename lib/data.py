@@ -101,11 +101,11 @@ def loadArff(arffPath, xmlPath):
             for p in pairs:
                 pair = p.split(' ')
                 index = int(pair[0])
-                if index in catAttributesIndexes or index in labelsIndexes:
+                if index in catAttributesIndexes or i in labelsIndexes:
                     catAttributesAux[catAttributesIndexes.index(index)] = pair[1]
                 else:
                     numAttributesAux[numAttributesIndexes.index(index)] = float(pair[1])
-            if len(catAttributesIndexes) > 0:
+            if len(catAttributesIndexes) + len(labelsIndexes) > 0:
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
@@ -117,11 +117,11 @@ def loadArff(arffPath, xmlPath):
             numAttributesAux = []
             values = line.split(',')
             for i in range(len(values)):
-                if i in catAttributesIndexes or index in labelsIndexes:
+                if i in catAttributesIndexes or i in labelsIndexes:
                     catAttributesAux.append(values[i].replace('\n',''))
                 else:
                     numAttributesAux.append(float(values[i]))
-            if len(catAttributesIndexes) > 0:
+            if len(catAttributesIndexes) + len(labelsIndexes) > 0:
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
@@ -143,7 +143,7 @@ def toArff(D, X_num, X_cat, num_instances, filename):
             line = '{'
         contNum = 0
         contCat = 0
-        for j in (D.numIndexes + D.catIndexes):
+        for j in (D.numIndexes + D.catIndexes + D.labelIndexes):
             if j in D.numIndexes:
                 if D.sparse:
                     line += str(j) + ' ' + str(X_num[i][contNum]) + ','
@@ -202,39 +202,40 @@ class Dataset:  #No se si añadir las propias etiquetas
 
     def get_minoritary_labels(self):
 
-        labelCount = [0 for i in self.labelIndexes]
+        labelCount = [0] * self.n_labels
 
-        for instance in self.X_cat:
-            labelCount = [x + y for x, y in zip(labelCount, self.X_cat[instance][self.labelIndexes])]
+        for instance in self.X_cat['train']:
+            for label in range(len(labelCount)):
+                labelCount[label] += int(instance[-(self.n_labels - label)])
 
         mean = sum(labelCount)/len(labelCount)
 
-        minorityLabels = []
+        minoritaryLabels = []
 
         for i in range(len(labelCount)):
             if labelCount[i] < mean:
-                minorityLabels.append((i, labelCount[i]))
+                minoritaryLabels.append((i, labelCount[i]))
 
-        return minorityLabels
+        return minoritaryLabels
 
 
     def get_minoritary_datasets(self):
 
-        minorityLabels = self.get_minoritary_labels()
-        minoritaryIndexes = [[] for i in minorityLabels]
-        for i in self.X_cat.size():
-            for (j, n) in minorityLabels:
-                if self.X_cat[i][self.len(self.catIndexes) + j] == 1:
-                    minoritaryIndexes[j].append(i)
+        minoritaryLabels = self.get_minoritary_labels()
+        minoritaryIndexes = dict((str(j),[]) for (j, n) in minoritaryLabels)
+        for i in range(self.X_cat['train'].shape[0]):
+            for (j, n) in minoritaryLabels:
+                if int(self.X_cat['train'][i][-(self.n_labels - j)]) == 1:
+                    minoritaryIndexes[str(j)].append(i)
 
         minoritaryDatasets = []
-        for l in minoritaryIndexes:
-            X_num = self.X_num[l]
-            X_cat = self.X_cat[l]
+        for j, l in minoritaryIndexes.items():
+            X_num = np.take(self.X_num['train'], l, axis=0)
+            X_cat = np.take(self.X_cat['train'], l, axis=0)
             D = Dataset(
-                X_num,
-                X_cat,
-                [0 for i in X_cat.size()],
+                {'train': X_num},
+                {'train': X_cat},
+                {'train' : np.array(([0] * X_cat.shape[0]))},
                 self.n_labels,
                 self.arffHeader,
                 self.sparse,

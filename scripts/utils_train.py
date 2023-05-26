@@ -41,5 +41,8 @@ def make_dataset(
 ):
 
     D = lib.Dataset.from_dir(data_path, strategy)
-    
-    return lib.transform_dataset(D, T, None)
+    newD = []
+    for d in D:
+        newD.append(lib.transform_dataset(d, T, None))
+
+    return newD
