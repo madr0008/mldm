@@ -3,7 +3,7 @@ import torch
 import os
 import numpy as np
 import zero
-from tab_ddpm.gaussian_multinomial_diffsuion import GaussianMultinomialDiffusion
+from tab_ddpm.gaussian_multinomial_diffusion import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset, update_ema
 import lib
 import pandas as pd
