@@ -110,7 +110,7 @@ def train(
 
         dataset = datasets[i]
 
-        K = np.array(dataset.get_category_sizes()
+        K = np.array(dataset.get_category_sizes())
         if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
             K = np.array([0])
 

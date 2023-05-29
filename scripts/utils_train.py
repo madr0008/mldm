@@ -37,10 +37,11 @@ def concat_y_to_X(X, y):
 def make_dataset(
     data_path: str,
     T: lib.Transformations,
-    strategy: str
+    strategy: str,
+    pct: int
 ):
 
-    D = lib.Dataset.from_dir(data_path, strategy)
+    D = lib.Dataset.from_dir(data_path, strategy, pct)
     newD = []
     for d in D:
         newD.append(lib.transform_dataset(d, T, None))

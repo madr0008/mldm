@@ -35,7 +35,8 @@ def sample(
     change_val = False,
     strategy = "general",
     label_percentage=50,
-    max_iter = 1000
+    max_iter = 1000,
+    output_file = "salida.arff"
 ):
     zero.improve_reproducibility(seed)
 
@@ -93,7 +94,7 @@ def sample(
         diffusion.to(device)
         diffusion.eval()
 
-        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y, return_counts=True)
+        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y), return_counts=True)
 
         if strategy == "general":
             X_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
@@ -141,7 +142,7 @@ def sample(
             print("Discrete cols:", disc_cols)
             if len(disc_cols):
                 X_num = round_columns(D.X_num, X_num, disc_cols)
+
             X_num_total = np.concatenate((X_num_total, X_num), axis=0)
 
-
-    toArff(D_aux, X_num_total, X_cat_total, X_num_total.shape[0], 'salida.arff')
+    toArff(D_aux, X_num_total, X_cat_total, X_num_total.shape[0], output_file)

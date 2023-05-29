@@ -65,7 +65,8 @@ def main():
         change_val=False, #Meter en config
         strategy = raw_config['sample']['strategy'],
         label_percentage=raw_config['sample']['label_percentage'],
-        max_iter = raw_config['sample']['max_iterations']
+        max_iter = raw_config['sample']['max_iterations'],
+        output_file = raw_config['output_file']
     )
 
     print(f'Elapsed time: {str(timer)}')

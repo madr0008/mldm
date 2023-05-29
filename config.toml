@@ -1,6 +1,7 @@
 seed = 0
 parent_dir = "../datasets/birds"
 real_data_path = "../datasets/birds/birds"
+output_file = "salida.arff"
 model_type = "mlp"
 device = "cuda:0"
 
