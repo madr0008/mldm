@@ -366,9 +366,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         return log_probs
 
-    def predict_start(self, model_out, log_x_t, t, out_dict):
-
-        # model_out = self._denoise_fn(x_t, t.to(x_t.device), **out_dict)
+    def predict_start(self, model_out, log_x_t):
 
         assert model_out.size(0) == log_x_t.size(0)
         assert model_out.size(1) == self.num_classes.sum(), f'{model_out.size()}'
@@ -409,25 +407,25 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         return log_EV_xtmin_given_xt_given_xstart
 
-    def p_pred(self, model_out, log_x, t, out_dict):
+    def p_pred(self, model_out, log_x, t):
         if self.parametrization == 'x0':
-            log_x_recon = self.predict_start(model_out, log_x, t=t, out_dict=out_dict)
+            log_x_recon = self.predict_start(model_out, log_x)
             log_model_pred = self.q_posterior(
                 log_x_start=log_x_recon, log_x_t=log_x, t=t)
         elif self.parametrization == 'direct':
-            log_model_pred = self.predict_start(model_out, log_x, t=t, out_dict=out_dict)
+            log_model_pred = self.predict_start(model_out, log_x)
         else:
             raise ValueError
         return log_model_pred
 
     @torch.no_grad()
-    def p_sample(self, model_out, log_x, t, out_dict):
-        model_log_prob = self.p_pred(model_out, log_x=log_x, t=t, out_dict=out_dict)
+    def p_sample(self, model_out, log_x, t):
+        model_log_prob = self.p_pred(model_out, log_x=log_x, t=t)
         out = self.log_sample_categorical(model_log_prob)
         return out
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, out_dict):
+    def p_sample_loop(self, shape):
         device = self.log_alpha.device
 
         b = shape[0]
@@ -435,12 +433,12 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         img = torch.randn(shape, device=device)
 
         for i in reversed(range(1, self.num_timesteps)):
-            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long), out_dict)
+            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long))
         return img
 
     @torch.no_grad()
-    def _sample(self, image_size, out_dict, batch_size = 16):
-        return self.p_sample_loop((batch_size, 3, image_size, image_size), out_dict)
+    def _sample(self, image_size, batch_size = 16):
+        return self.p_sample_loop((batch_size, 3, image_size, image_size))
 
     @torch.no_grad()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -477,7 +475,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         return log_sample
 
-    def nll(self, log_x_start, out_dict):
+    def nll(self, log_x_start):
         b = log_x_start.size(0)
         device = log_x_start.device
         loss = 0
@@ -487,8 +485,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             kl = self.compute_Lt(
                 log_x_start=log_x_start,
                 log_x_t=self.q_sample(log_x_start=log_x_start, t=t_array),
-                t=t_array,
-                out_dict=out_dict)
+                t=t_array)
 
             loss += kl
 
@@ -507,10 +504,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         kl_prior = self.multinomial_kl(log_qxT_prob, log_half_prob)
         return sum_except_batch(kl_prior)
 
-    def compute_Lt(self, model_out, log_x_start, log_x_t, t, out_dict, detach_mean=False):
+    def compute_Lt(self, model_out, log_x_start, log_x_t, t, detach_mean=False):
         log_true_prob = self.q_posterior(
             log_x_start=log_x_start, log_x_t=log_x_t, t=t)
-        log_model_prob = self.p_pred(model_out, log_x=log_x_t, t=t, out_dict=out_dict)
+        log_model_prob = self.p_pred(model_out, log_x=log_x_t, t=t)
 
         if detach_mean:
             log_model_prob = log_model_prob.detach()
@@ -549,11 +546,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         else:
             raise ValueError
 
-    def _multinomial_loss(self, model_out, log_x_start, log_x_t, t, pt, out_dict):
+    def _multinomial_loss(self, model_out, log_x_start, log_x_t, t, pt):
 
         if self.multinomial_loss_type == 'vb_stochastic':
             kl = self.compute_Lt(
-                model_out, log_x_start, log_x_t, t, out_dict
+                model_out, log_x_start, log_x_t, t
             )
             kl_prior = self.kl_prior(log_x_start)
             # Upweigh loss term of the kl
@@ -568,10 +565,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         else:
             raise ValueError()
 
-    def log_prob(self, x, out_dict):
+    def log_prob(self, x):
         b, device = x.size(0), x.device
         if self.training:
-            return self._multinomial_loss(x, out_dict)
+            return self._multinomial_loss(x)
 
         else:
             log_x_start = index_to_log_onehot(x, self.num_classes)
@@ -579,7 +576,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             t, pt = self.sample_time(b, device, 'importance')
 
             kl = self.compute_Lt(
-                log_x_start, self.q_sample(log_x_start=log_x_start, t=t), t, out_dict)
+                log_x_start, self.q_sample(log_x_start=log_x_start, t=t), t)
 
             kl_prior = self.kl_prior(log_x_start)
 
@@ -588,7 +585,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
             return -loss
     
-    def mixed_loss(self, x, out_dict):
+    def mixed_loss(self, x):
         b = x.shape[0]
         device = x.device
         t, pt = self.sample_time(b, device, 'uniform')
@@ -610,7 +607,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         model_out = self._denoise_fn(
             x_in,
             t,
-            **out_dict
         )
 
         model_out_num = model_out[:, :self.num_numerical_features]
@@ -619,18 +615,15 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         loss_multi = torch.zeros((1,)).float()
         loss_gauss = torch.zeros((1,)).float()
         if x_cat.shape[1] > 0:
-            loss_multi = self._multinomial_loss(model_out_cat, log_x_cat, log_x_cat_t, t, pt, out_dict) / len(self.num_classes)
+            loss_multi = self._multinomial_loss(model_out_cat, log_x_cat, log_x_cat_t, t, pt) / len(self.num_classes)
         
         if x_num.shape[1] > 0:
             loss_gauss = self._gaussian_loss(model_out_num, x_num, x_num_t, t, noise)
 
-        # loss_multi = torch.where(out_dict['y'] == 1, loss_multi, 2 * loss_multi)
-        # loss_gauss = torch.where(out_dict['y'] == 1, loss_gauss, 2 * loss_gauss)
-
         return loss_multi.mean(), loss_gauss.mean()
     
     @torch.no_grad()
-    def mixed_elbo(self, x0, out_dict):
+    def mixed_elbo(self, x0):
         b = x0.size(0)
         device = x0.device
 
@@ -643,7 +636,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         gaussian_loss = []
         xstart_mse = []
         mse = []
-        mu_mse = []
         out_mean = []
         true_mean = []
         multinomial_loss = []
@@ -660,7 +652,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             model_out = self._denoise_fn(
                 torch.cat([x_num_t, log_x_cat_t], dim=1),
                 t_array,
-                **out_dict
             )
             
             model_out_num = model_out[:, :self.num_numerical_features]
@@ -673,7 +664,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                     log_x_start=log_x_cat,
                     log_x_t=log_x_cat_t,
                     t=t_array,
-                    out_dict=out_dict
                 )
 
             out = self._vb_terms_bpd(
@@ -687,7 +677,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             multinomial_loss.append(kl)
             gaussian_loss.append(out["output"])
             xstart_mse.append(mean_flat((out["pred_xstart"] - x_num) ** 2))
-            # mu_mse.append(mean_flat(out["mean_mse"]))
             out_mean.append(mean_flat(out["out_mean"]))
             true_mean.append(mean_flat(out["true_mean"]))
 
@@ -698,7 +687,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         multinomial_loss = torch.stack(multinomial_loss, dim=1)
         xstart_mse = torch.stack(xstart_mse, dim=1)
         mse = torch.stack(mse, dim=1)
-        # mu_mse = torch.stack(mu_mse, dim=1)
         out_mean = torch.stack(out_mean, dim=1)
         true_mean = torch.stack(true_mean, dim=1)
 
@@ -719,7 +707,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             "losses_multinimial": multinomial_loss,
             "xstart_mse": xstart_mse,
             "mse": mse,
-            # "mu_mse": mu_mse
             "out_mean": out_mean,
             "true_mean": true_mean
         }
@@ -770,7 +757,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         self,
         noise,
         T,
-        out_dict,
         eta=0.0
     ):
         x = noise
@@ -779,7 +765,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         for t in reversed(range(T)):
             print(f'Sample timestep {t:4d}', end='\r')
             t_array = (torch.ones(b, device=device) * t).long()
-            out_num = self._denoise_fn(x, t_array, **out_dict)
+            out_num = self._denoise_fn(x, t_array)
             x = self.gaussian_ddim_step(
                 out_num,
                 x,
@@ -826,14 +812,13 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         self,
         x,
         T,
-        out_dict,
     ):
         b = x.shape[0]
         device = x.device
         for t in range(T):
             print(f'Reverse timestep {t:4d}', end='\r')
             t_array = (torch.ones(b, device=device) * t).long()
-            out_num = self._denoise_fn(x, t_array, **out_dict)
+            out_num = self._denoise_fn(x, t_array)
             x = self.gaussian_ddim_reverse_step(
                 out_num,
                 x,
@@ -851,11 +836,10 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         model_out_cat,
         log_x_t,
         t,
-        out_dict,
         eta=0.0
     ):
         # not ddim, essentially
-        log_x0 = self.predict_start(model_out_cat, log_x_t=log_x_t, t=t, out_dict=out_dict)
+        log_x0 = self.predict_start(model_out_cat, log_x_t=log_x_t)
 
         alpha_bar = extract(self.alphas_cumprod, t, log_x_t.shape)
         alpha_bar_prev = extract(self.alphas_cumprod_prev, t, log_x_t.shape)
@@ -883,7 +867,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         return out
 
     @torch.no_grad()
-    def sample_ddim(self, num_samples, y_dist):
+    def sample_ddim(self, num_samples):
         b = num_samples
         device = self.log_alpha.device
         z_norm = torch.randn((b, self.num_numerical_features), device=device)
@@ -894,25 +878,18 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             uniform_logits = torch.zeros((b, len(self.num_classes_expanded)), device=device)
             log_z = self.log_sample_categorical(uniform_logits)
 
-        y = torch.multinomial(
-            y_dist,
-            num_samples=b,
-            replacement=True
-        )
-        out_dict = {'y': y.long().to(device)}
         for i in reversed(range(0, self.num_timesteps)):
             print(f'Sample timestep {i:4d}', end='\r')
             t = torch.full((b,), i, device=device, dtype=torch.long)
             model_out = self._denoise_fn(
                 torch.cat([z_norm, log_z], dim=1).float(),
                 t,
-                **out_dict
             )
             model_out_num = model_out[:, :self.num_numerical_features]
             model_out_cat = model_out[:, self.num_numerical_features:]
             z_norm = self.gaussian_ddim_step(model_out_num, z_norm, t, clip_denoised=False)
             if has_cat:
-                log_z = self.multinomial_ddim_step(model_out_cat, log_z, t, out_dict)
+                log_z = self.multinomial_ddim_step(model_out_cat, log_z, t)
 
         print()
         z_ohe = torch.exp(log_z).round()
@@ -920,11 +897,11 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         if has_cat:
             z_cat = ohe_to_categories(z_ohe, self.num_classes)
         sample = torch.cat([z_norm, z_cat], dim=1).cpu()
-        return sample, out_dict
+        return sample
     
 
     @torch.no_grad()
-    def sample(self, num_samples, y_dist):
+    def sample(self, num_samples):
         b = num_samples
         device = self.log_alpha.device
         z_norm = torch.randn((b, self.num_numerical_features), device=device)
@@ -935,25 +912,18 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             uniform_logits = torch.zeros((b, len(self.num_classes_expanded)), device=device)
             log_z = self.log_sample_categorical(uniform_logits)
 
-        y = torch.multinomial(
-            y_dist,
-            num_samples=b,
-            replacement=True
-        )
-        out_dict = {'y': y.long().to(device)}
         for i in reversed(range(0, self.num_timesteps)):
             print(f'Sample timestep {i:4d}', end='\r')
             t = torch.full((b,), i, device=device, dtype=torch.long)
             model_out = self._denoise_fn(
                 torch.cat([z_norm, log_z], dim=1).float(),
                 t,
-                **out_dict
             )
             model_out_num = model_out[:, :self.num_numerical_features]
             model_out_cat = model_out[:, self.num_numerical_features:]
             z_norm = self.gaussian_p_sample(model_out_num, z_norm, t, clip_denoised=False)['sample']
             if has_cat:
-                log_z = self.p_sample(model_out_cat, log_z, t, out_dict)
+                log_z = self.p_sample(model_out_cat, log_z, t)
 
         print()
         z_ohe = torch.exp(log_z).round()
@@ -961,9 +931,9 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         if has_cat:
             z_cat = ohe_to_categories(z_ohe, self.num_classes)
         sample = torch.cat([z_norm, z_cat], dim=1).cpu()
-        return sample, out_dict
+        return sample
     
-    def sample_all(self, num_samples, batch_size, y_dist, ddim=False):
+    def sample_all(self, num_samples, batch_size, ddim=False):
         if ddim:
             print('Sample using DDIM.')
             sample_fn = self.sample_ddim
@@ -972,27 +942,22 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         
         b = batch_size
 
-        all_y = []
         all_samples = []
         num_generated = 0
         while num_generated < num_samples:
-            sample, out_dict = sample_fn(b, y_dist)
+            sample = sample_fn(b)
             mask_nan = torch.any(sample.isnan(), dim=1)
             sample = sample[~mask_nan]
-            out_dict['y'] = out_dict['y'][~mask_nan]
-
             all_samples.append(sample)
-            all_y.append(out_dict['y'].cpu())
             if sample.shape[0] != b:
                 raise FoundNANsError
             num_generated += sample.shape[0]
 
         x_gen = torch.cat(all_samples, dim=0)[:num_samples]
-        y_gen = torch.cat(all_y, dim=0)[:num_samples]
 
-        return x_gen.numpy(), y_gen.numpy()
+        return x_gen.numpy()
 
-    def sample_loop(self, num_samples, max_iter, batch_size, y_dist, D, ddim=False):
+    def sample_loop(self, num_samples, max_iter, batch_size, D, ddim=False):
         if ddim:
             print('Sample using DDIM.')
             sample_fn = self.sample_ddim
@@ -1001,7 +966,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         b = batch_size
 
-        all_y = []
         all_samples = []
         num_generated = 0
         num_valid = 0
@@ -1009,10 +973,9 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
         newMinLabels = [0] * len(minLabels)
 
         while num_valid < num_samples and num_generated < max_iter:
-            sample, out_dict = sample_fn(b, y_dist)
+            sample = sample_fn(b)
             mask_nan = torch.any(sample.isnan(), dim=1)
             sample = sample[~mask_nan]
-            out_dict['y'] = out_dict['y'][~mask_nan]
             if sample.shape[0] != b:
                 raise FoundNANsError
             num_generated += sample.shape[0]
@@ -1022,7 +985,6 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
                     (j, n) = minLabels[k]
                     if int(sample[i][-(D.n_labels - j)].item()) == 1:
                         all_samples.append(sample[i].tolist())
-                        all_y.append(out_dict['y'].cpu())
                         newMinLabels[k] += 1
                         num_valid += 1
                         if newMinLabels[k] >= n:
@@ -1033,4 +995,4 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
 
         print(str(num_valid) + "/" + str(num_samples) + " " + str(num_generated) + "/" + str(max_iter))
 
-        return np.array(all_samples), torch.cat(all_y, dim=0)[:num_samples].numpy()
+        return np.array(all_samples)

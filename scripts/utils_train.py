@@ -6,8 +6,6 @@ from tab_ddpm.modules import MLPDiffusion, ResNetDiffusion
 def get_model(
     model_name,
     model_params,
-    n_num_features,
-    category_sizes
 ): 
 
     if model_name == 'mlp':
@@ -44,6 +42,6 @@ def make_dataset(
     D = lib.Dataset.from_dir(data_path, strategy, pct)
     newD = []
     for d in D:
-        newD.append(lib.transform_dataset(d, T, None))
+        newD.append(lib.transform_dataset(d, T))
 
     return newD

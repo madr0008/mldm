@@ -33,5 +33,7 @@ sample_percentage = 25
 strategy = "mixed"
 label_percentage = 50
 max_iterations = 10000
+normalize_last = "True"
+normalize_quantile = "False"
 batch_size = 1000
 seed = 0

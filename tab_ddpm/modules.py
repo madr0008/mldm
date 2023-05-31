@@ -426,7 +426,6 @@ class MLPDiffusion(nn.Module):
     def __init__(self, d_in, rtdl_params, dim_t = 128):
         super().__init__()
         self.dim_t = dim_t
-        self.num_classes = 2    #Esto hay que cambiarlo
 
         # d0 = rtdl_params['d_layers'][0]
 
@@ -434,8 +433,6 @@ class MLPDiffusion(nn.Module):
         rtdl_params['d_out'] = d_in
 
         self.mlp = MLP.make_baseline(**rtdl_params)
-
-        self.label_emb = nn.Embedding(self.num_classes, dim_t)
         
         self.proj = nn.Linear(d_in, dim_t)
         self.time_embed = nn.Sequential(
@@ -444,11 +441,8 @@ class MLPDiffusion(nn.Module):
             nn.Linear(dim_t, dim_t)
         )
     
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps):
         emb = self.time_embed(timestep_embedding(timesteps, self.dim_t))
-        if y is not None:
-            y = y.squeeze()
-            emb += F.silu(self.label_emb(y))
         x = self.proj(x) + emb
         return self.mlp(x)
 
@@ -456,14 +450,12 @@ class ResNetDiffusion(nn.Module):
     def __init__(self, d_in, rtdl_params, dim_t = 256):
         super().__init__()
         self.dim_t = dim_t
-        self.num_classes = 2
 
         rtdl_params['d_in'] = d_in
         rtdl_params['d_out'] = d_in
         rtdl_params['emb_d'] = dim_t
         self.resnet = ResNet.make_baseline(**rtdl_params)
 
-        self.label_emb = nn.Embedding(self.num_classes, dim_t)
         
         self.time_embed = nn.Sequential(
             nn.Linear(dim_t, dim_t),
@@ -471,8 +463,6 @@ class ResNetDiffusion(nn.Module):
             nn.Linear(dim_t, dim_t)
         )
     
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps):
         emb = self.time_embed(timestep_embedding(timesteps, self.dim_t))
-        if y is not None:
-            emb += self.label_emb(y.squeeze())
         return self.resnet(x, emb)

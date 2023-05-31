@@ -28,7 +28,7 @@ CAT_RARE_VALUE = '__rare__'
 Normalization = Literal['standard', 'quantile', 'minmax']
 NumNanPolicy = Literal['drop-rows', 'mean']
 CatNanPolicy = Literal['most_frequent']
-CatEncoding = Literal['one-hot', 'counter']
+CatEncoding = Literal['one-hot']
 YPolicy = Literal['default']
 
 
@@ -87,7 +87,6 @@ def loadArff(arffPath, xmlPath):
     #Get data
     catAttributes = []
     numAttributes = []
-    labels = []
     numDecimals = [0] * len(numAttributesIndexes)
     for line in lines[(aux+1):]:
         if line[0] == '{':
@@ -110,7 +109,6 @@ def loadArff(arffPath, xmlPath):
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
-            labels.append(0)    #Esto lo quiero quitar
         else:
             #Normal
             sparse = False
@@ -129,14 +127,12 @@ def loadArff(arffPath, xmlPath):
                 catAttributes.append(catAttributesAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
-            labels.append(0)    #Esto lo quiero quitar
 
     #Transform lists of lists to numpy arrays
     numAttributesRet = np.array([np.array(xi) for xi in numAttributes]) if len(numAttributes) > 0 else None
     catAttributesRet = np.array([np.array(xi) for xi in catAttributes]) if len(catAttributes) > 0 else None
-    labelsRet = np.array(labels)    #Esto lo quiero quitar
 
-    return numAttributesRet, catAttributesRet, labelsRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes, labelsIndexes, numDecimals
+    return numAttributesRet, catAttributesRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes, labelsIndexes, numDecimals
 
 
 def toArff(D, X_num, X_cat, num_instances, filename):
@@ -173,7 +169,6 @@ def toArff(D, X_num, X_cat, num_instances, filename):
 class Dataset:
     X_num: np.ndarray
     X_cat: np.ndarray
-    y: np.ndarray
     n_labels: Optional[int]
     arffHeader: str
     sparse: bool
@@ -186,12 +181,11 @@ class Dataset:
     def from_dir(cls, dir_: str, strategy: str, pct: int):
 
         dir_ = Path(dir_)
-        X_num, X_cat, y, numLabels, header, sparse, numIndexes, catIndexes, labelIndexes, numDecimals = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
+        X_num, X_cat, numLabels, header, sparse, numIndexes, catIndexes, labelIndexes, numDecimals = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
 
         D = Dataset(
                 X_num,
                 X_cat,
-                y,
                 numLabels,
                 header,
                 sparse,
@@ -209,7 +203,6 @@ class Dataset:
             return [D.get_minoritary_dataset(pct)]
 
 
-    #Returns the labels with a IR below MeanIR (not yet though)
     def get_minoritary_labels(self):
 
         labelCount = [0] * self.n_labels
@@ -257,7 +250,6 @@ class Dataset:
             D = Dataset(
                 X_num,
                 X_cat,
-                np.array(([0] * X_cat.shape[0])),
                 self.n_labels,
                 self.arffHeader,
                 self.sparse,
@@ -288,7 +280,6 @@ class Dataset:
         D = Dataset(
             X_num,
             X_cat,
-            np.array(([0] * X_cat.shape[0])),
             self.n_labels,
             self.arffHeader,
             self.sparse,
@@ -314,7 +305,7 @@ class Dataset:
         return self.n_num_features + self.n_cat_features
 
     def size(self) -> int:
-        return len(self.y)
+        return self.X_cat.shape[0]
 
     @property
     def nn_output_dim(self) -> int:
@@ -359,12 +350,9 @@ def normalize(
 def cat_encode(
     X: np.ndarray,
     encoding: Optional[CatEncoding],
-    y_train: Optional[np.ndarray],
     seed: Optional[int],
     return_encoder : bool = False
 ) -> Tuple[np.ndarray, bool, Optional[Any]]:  # (X, is_converted_to_numerical)
-    if encoding != 'counter':
-        y_train = None
 
     # Step 1. Map strings to 0-based ranges
 
@@ -398,15 +386,6 @@ def cat_encode(
         # encoder.steps.append(('ohe', ohe))
         encoder.fit(X)
         X = encoder.transform(X)
-    elif encoding == 'counter':
-        assert y_train is not None
-        assert seed is not None
-        loe = LeaveOneOutEncoder(sigma=0.1, random_state=seed, return_df=False)
-        encoder.steps.append(('loe', loe))
-        encoder.fit(X, y_train)
-        X = encoder.transform(X)
-        if not isinstance(X, pd.DataFrame):
-            X = X.values()
     else:
         util.raise_unknown('encoding', encoding)
     
@@ -425,30 +404,7 @@ class Transformations:
 def transform_dataset(
     dataset: Dataset,
     transformations: Transformations,
-    cache_dir: Optional[Path],
-    return_transforms: bool = False
 ) -> Dataset:
-    # WARNING: the order of transformations matters. Moreover, the current
-    # implementation is not ideal in that sense.
-    if cache_dir is not None:
-        transformations_md5 = hashlib.md5(
-            str(transformations).encode('utf-8')
-        ).hexdigest()
-        transformations_str = '__'.join(map(str, astuple(transformations)))
-        cache_path = (
-            cache_dir / f'cache__{transformations_str}__{transformations_md5}.pickle'
-        )
-        if cache_path.exists():
-            cache_transformations, value = util.load_pickle(cache_path)
-            if transformations == cache_transformations:
-                print(
-                    f"Using cached features: {cache_dir.name + '/' + cache_path.name}"
-                )
-                return value
-            else:
-                raise RuntimeError(f'Hash collision for {cache_path}')
-    else:
-        cache_path = None
 
     num_transform = None
     cat_transform = None
@@ -472,7 +428,6 @@ def transform_dataset(
         X_cat, is_num, cat_transform = cat_encode(
             dataset.X_cat,
             transformations.cat_encoding,
-            dataset.y,
             transformations.seed,
             return_encoder=True
         )
@@ -484,25 +439,11 @@ def transform_dataset(
             )
             X_cat = None
 
-    dataset = replace(dataset, X_num=X_num, X_cat=X_cat, y=dataset.y)
+    dataset = replace(dataset, X_num=X_num, X_cat=X_cat)
     dataset.num_transform = num_transform
     dataset.cat_transform = cat_transform
 
-    if cache_path is not None:
-        util.dump_pickle((transformations, dataset), cache_path)
-    # if return_transforms:
-        # return dataset, num_transform, cat_transform
     return dataset
-
-
-def build_dataset(
-    path: Union[str, Path],
-    transformations: Transformations,
-    cache: bool
-) -> Dataset:
-    path = Path(path)
-    dataset = Dataset.from_dir(path)
-    return transform_dataset(dataset, transformations, path if cache else None)
 
 
 def prepare_tensors(
@@ -637,8 +578,8 @@ def prepare_fast_dataloader(
             X = torch.from_numpy(D.X_cat).float()
     else:
         X = torch.from_numpy(D.X_num).float()
-    y = torch.from_numpy(D.y)
-    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=True)
+
+    dataloader = FastTensorDataLoader(X, batch_size=batch_size, shuffle=True)
     while True:
         yield from dataloader
 
@@ -650,8 +591,8 @@ def prepare_fast_torch_dataloader(
         X = torch.from_numpy(np.concatenate([D.X_num, D.X_cat], axis=1)).float()
     else:
         X = torch.from_numpy(D.X_num).float()
-    y = torch.from_numpy(D.y)
-    dataloader = FastTensorDataLoader(X, y, batch_size=batch_size, shuffle=True)
+
+    dataloader = FastTensorDataLoader(X, batch_size=batch_size, shuffle=True)
     return dataloader
 
 def round_columns(X_real, X_synth, columns):
@@ -684,17 +625,10 @@ def concat_features(D : Dataset):
 
 def concat_to_pd(X_num, X_cat, y):
     if X_num is None:
-        return pd.concat([
-            pd.DataFrame(X_cat, columns=list(range(X_cat.shape[1]))),
-            pd.DataFrame(y, columns=['y'])
-        ], axis=1)
+        return pd.DataFrame(X_cat, columns=list(range(X_cat.shape[1])))
     if X_cat is not None:
         return pd.concat([
             pd.DataFrame(X_num, columns=list(range(X_num.shape[1]))),
-            pd.DataFrame(X_cat, columns=list(range(X_num.shape[1], X_num.shape[1] + X_cat.shape[1]))),
-            pd.DataFrame(y, columns=['y'])
+            pd.DataFrame(X_cat, columns=list(range(X_num.shape[1], X_num.shape[1] + X_cat.shape[1])))
         ], axis=1)
-    return pd.concat([
-            pd.DataFrame(X_num, columns=list(range(X_num.shape[1]))),
-            pd.DataFrame(y, columns=['y'])
-        ], axis=1)
+    return pd.DataFrame(X_num, columns=list(range(X_num.shape[1])))

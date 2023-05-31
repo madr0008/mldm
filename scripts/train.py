@@ -31,12 +31,10 @@ class Trainer:
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
 
-    def _run_step(self, x, out_dict):
+    def _run_step(self, x):
         x = x.to(self.device)
-        for k in out_dict:
-            out_dict[k] = out_dict[k].long().to(self.device)
         self.optimizer.zero_grad()
-        loss_multi, loss_gauss = self.diffusion.mixed_loss(x, out_dict)
+        loss_multi, loss_gauss = self.diffusion.mixed_loss(x)
         loss = loss_multi + loss_gauss
         loss.backward()
         self.optimizer.step()
@@ -50,9 +48,8 @@ class Trainer:
 
         curr_count = 0
         while step < self.steps:
-            x, out_dict = next(self.train_iter)
-            out_dict = {'y': out_dict}
-            batch_loss_multi, batch_loss_gauss = self._run_step(x, out_dict)
+            x = next(self.train_iter)[0]
+            batch_loss_multi, batch_loss_gauss = self._run_step(x)
 
             self._anneal_lr(step)
 
@@ -122,8 +119,6 @@ def train(
         model = get_model(
             model_type,
             model_params,
-            num_numerical_features,
-            category_sizes=dataset.get_category_sizes()
         )
         model.to(device)
 

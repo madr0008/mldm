@@ -28,15 +28,15 @@ def sample(
     gaussian_loss_type = 'mse',
     scheduler = 'cosine',
     T_dict = None,
-    num_numerical_features = 0,
-    disbalance = None,
     device = torch.device('cuda:1'),
     seed = 0,
-    change_val = False,
     strategy = "general",
     label_percentage=50,
     max_iter = 1000,
-    output_file = "salida.arff"
+    output_file = "salida.arff",
+    alFinal = True,
+    quantileFinal=False,
+    quantile = False
 ):
     zero.improve_reproducibility(seed)
 
@@ -76,8 +76,6 @@ def sample(
         model = get_model(
             model_type,
             model_params,
-            num_numerical_features_,
-            category_sizes=D.get_category_sizes()
         )
 
         model.load_state_dict(
@@ -94,27 +92,12 @@ def sample(
         diffusion.to(device)
         diffusion.eval()
 
-        _, empirical_class_dist = torch.unique(torch.from_numpy(D.y), return_counts=True)
-
         if strategy == "general":
-            X_gen, y_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, empirical_class_dist.float(), D, ddim=False)
+            X_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, D, ddim=False)
         else:
-            X_gen, y_gen = diffusion.sample_all(minLabels[i][1], batch_size, empirical_class_dist.float(), ddim=False)
-
-        ###
-        # X_num_unnorm = X_gen[:, :num_numerical_features]
-        # lo = np.percentile(X_num_unnorm, 2.5, axis=0)
-        # hi = np.percentile(X_num_unnorm, 97.5, axis=0)
-        # idx = (lo < X_num_unnorm) & (hi > X_num_unnorm)
-        # X_gen = X_gen[np.all(idx, axis=1)]
-        # y_gen = y_gen[np.all(idx, axis=1)]
-        ###
+            X_gen = diffusion.sample_all(minLabels[i][1], batch_size, ddim=False)
 
         num_numerical_features = num_numerical_features_
-
-        #ESTO TIENE QUE SER UN PARAMETRO
-        alFinal = True
-        quantile = False
 
         X_num_ = X_gen
         if num_numerical_features < X_gen.shape[1]:
@@ -125,9 +108,9 @@ def sample(
 
         if num_numerical_features_ != 0:
             X_num_ = X_gen[:, :num_numerical_features]
-            if alFinal or quantile:
+            if alFinal:
                 X_num_ = D.num_transform.inverse_transform(X_num_)
-            if not quantile:    #Y no se, quizas rentaria
+            if not quantile or (quantile and quantileFinal):
                 for col in range(num_numerical_features):
                     scaler = MinMaxScaler(feature_range=(D_aux.X_num.min(axis=0)[col], D_aux.X_num.max(axis=0)[col]))
                     scaler.fit(X_num_[:,col].reshape(-1, 1))
