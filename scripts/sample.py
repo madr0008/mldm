@@ -95,7 +95,7 @@ def sample(
         if strategy == "general":
             X_gen = diffusion.sample_loop(num_samples, max_iter, batch_size, D, ddim=False)
         else:
-            X_gen = diffusion.sample_all(minLabels[i][1], batch_size, ddim=False)
+            X_gen = diffusion.sample_all(num_samples, batch_size, ddim=False)
 
         num_numerical_features = num_numerical_features_
 
