@@ -8,7 +8,7 @@ import shutil
 import typing as ty
 from pathlib import Path
 
-PROJ = Path('tab-ddpm/').absolute().resolve()
+PROJ = Path('mldm/').absolute().resolve()
 EXP = PROJ / 'exp'
 DATA = PROJ / 'data'
 

@@ -17,7 +17,6 @@ Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/
     pip install torch==1.10.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
     pip install -r requirements.txt
 
-    # if the following commands do not succeed, update conda
     conda env config vars set PYTHONPATH=${PYTHONPATH}:${REPO_DIR}
     conda env config vars set PROJECT_DIR=${REPO_DIR}
 
@@ -47,20 +46,21 @@ Los parámetros para la ejecución del modelo se encuentran un fichero de config
 `mldm/` -- Directorio con la implementación del método propuesto
 
 - `mldm/gaussian_multinomial_diffusion.py` -- modelo de difusión  
-- `modules.py` -- otros módulos que componen el modelo principal
-- `utils.py` -- funciones matemáticas para el modelo
+- `mldm/modules.py` -- otros módulos que componen el modelo principal
+- `mldm/utils.py` -- funciones matemáticas para el modelo
 
-`scripts/` -- Directorio con los scripts principales
+`scripts/` -- Directorio con los scripts del proyecto
 
-- `scripts/pipeline.py` are used to train, sample and eval TabDDPM using a given config  
-- `scripts/tune_ddpm.py` -- tune hyperparameters of TabDDPM
-- `scripts/eval_[catboost|mlp|simple].py` -- evaluate synthetic data using a tuned evaluation model or simple models
-- `scripts/eval_seeds.py` -- eval using multiple sampling and multuple eval seeds
-- `scripts/eval_seeds_simple.py` --  eval using multiple sampling and multuple eval seeds (for simple models)
-- `scripts/tune_evaluation_model.py` -- tune hyperparameters of eval model (CatBoost or MLP)
-- `scripts/resample_privacy.py` -- privacy calculation  
+- `scripts/pipeline.py` -- script principal para la llamada a los procesos de entrenamiento y muestreo
+- `scripts/sample.py` -- script para el proceso de muestreo
+- `scripts/train.py` -- script para el proceso de entrenamiento
+- `scripts/utils_train.py` -- script con funciones auxiliares para el entrenamiento
 
-To understand the structure of `config.toml` file, read `CONFIG_DESCRIPTION.md`.
+`lib/` -- Directorio con bibliotecas locales del proyecto
+
+- `lib/data.py` -- script principal para la llamada a los procesos de entrenamiento y muestreo
+- `lib/env.py` -- script para el proceso de entrenamiento
+- `lib/util.py` -- script con funciones auxiliares para el entrenamiento
 
 ## Referencias
 

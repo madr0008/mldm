@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import lib
-from tab_ddpm.modules import MLPDiffusion, ResNetDiffusion
+from mldm.modules import MLPDiffusion, ResNetDiffusion
 
 def get_model(
     model_name,
