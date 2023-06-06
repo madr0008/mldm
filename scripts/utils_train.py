@@ -27,10 +27,6 @@ def update_ema(target_params, source_params, rate=0.999):
     for targ, src in zip(target_params, source_params):
         targ.detach().mul_(rate).add_(src.detach(), alpha=1 - rate)
 
-def concat_y_to_X(X, y):
-    if X is None:
-        return y.reshape(-1, 1)
-    return np.concatenate([y.reshape(-1, 1), X], axis=1)
 
 def make_dataset(
     data_path: str,

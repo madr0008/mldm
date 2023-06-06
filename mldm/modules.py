@@ -3,7 +3,7 @@ Code was adapted from https://github.com/Yura52/rtdl
 """
 
 import math
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from typing import Callable, List, Type, Union
 
 import torch
 import torch.nn as nn
@@ -37,16 +37,6 @@ def timestep_embedding(timesteps, dim, max_period=10000):
         embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     return embedding
 
-def _is_glu_activation(activation: ModuleType):
-    return (
-        isinstance(activation, str)
-        and activation.endswith('GLU')
-        or activation in [ReGLU, GEGLU]
-    )
-
-
-def _all_or_none(values):
-    assert all(x is None for x in values) or all(x is not None for x in values)
 
 def reglu(x: Tensor) -> Tensor:
     """The ReGLU activation function from [1].

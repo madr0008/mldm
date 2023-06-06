@@ -4,7 +4,7 @@ import zero
 import os
 from mldm.gaussian_multinomial_diffusion import GaussianMultinomialDiffusion
 from utils_train import get_model, make_dataset
-from lib import round_columns, toArff
+from lib import toArff
 from sklearn.preprocessing import MinMaxScaler
 import lib
 

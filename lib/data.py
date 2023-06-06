@@ -1,27 +1,17 @@
-import hashlib
-from collections import Counter
-from copy import deepcopy
-from dataclasses import astuple, dataclass, replace
-from importlib.resources import path
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, Optional, Union, cast, Tuple, Dict, List
+from typing import Any, Literal, Optional, Union, Tuple, List
 from bs4 import BeautifulSoup as bs
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 import sklearn.preprocessing
 import torch
-import os
-from category_encoders import LeaveOneOutEncoder
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import cdist
 
-from . import env, util
-from .util import load_json
-
+from . import util
 
 CAT_MISSING_VALUE = '__nan__'
 CAT_RARE_VALUE = '__rare__'
@@ -30,20 +20,6 @@ NumNanPolicy = Literal['drop-rows', 'mean']
 CatNanPolicy = Literal['most_frequent']
 CatEncoding = Literal['one-hot']
 YPolicy = Literal['default']
-
-
-class StandardScaler1d(StandardScaler):
-    def partial_fit(self, X, *args, **kwargs):
-        assert X.ndim == 1
-        return super().partial_fit(X[:, None], *args, **kwargs)
-
-    def transform(self, X, *args, **kwargs):
-        assert X.ndim == 1
-        return super().transform(X[:, None], *args, **kwargs).squeeze(1)
-
-    def inverse_transform(self, X, *args, **kwargs):
-        assert X.ndim == 1
-        return super().inverse_transform(X[:, None], *args, **kwargs).squeeze(1)
 
 
 def get_category_sizes(X: Union[torch.Tensor, np.ndarray]) -> List[int]:
@@ -467,82 +443,6 @@ def transform_dataset(
     return dataset
 
 
-def prepare_tensors(
-    dataset: Dataset, device: Union[str, torch.device]
-) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], torch.Tensor]:
-    X_num, X_cat, Y = (
-        None if x is None else torch.as_tensor(x)
-        for x in [dataset.X_num, dataset.X_cat, dataset.y]
-    )
-    if device.type != 'cpu':
-        X_num, X_cat, Y = (
-            None if x is None else x.to(device)
-            for x in [X_num, X_cat, Y]
-        )
-    assert X_num is not None
-    assert Y is not None
-    if not dataset.is_multiclass:
-        Y = Y.float()
-    return X_num, X_cat, Y
-
-###############
-## DataLoader##
-###############
-
-class TabDataset(torch.utils.data.Dataset):
-    def __init__(
-        self, dataset : Dataset
-    ):
-        super().__init__()
-
-        self.X_num = torch.from_numpy(dataset.X_num) if dataset.X_num is not None else None
-        self.X_cat = torch.from_numpy(dataset.X_cat) if dataset.X_cat is not None else None
-        self.y = torch.from_numpy(dataset.y)
-
-        assert self.y is not None
-        assert self.X_num is not None or self.X_cat is not None
-
-    def __len__(self):
-        return len(self.y)
-
-    def __getitem__(self, idx):
-        out_dict = {
-            'y': self.y[idx].long() if self.y is not None else None,
-        }
-
-        x = np.empty((0,))
-        if self.X_num is not None:
-            x = self.X_num[idx]
-        if self.X_cat is not None:
-            x = torch.cat([x, self.X_cat[idx]], dim=0)
-        return x.float(), out_dict
-
-def prepare_dataloader(
-    dataset : Dataset,
-    batch_size: int,
-):
-
-    torch_dataset = TabDataset(dataset)
-    loader = torch.utils.data.DataLoader(
-        torch_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=1,
-    )
-    while True:
-        yield from loader
-
-def prepare_torch_dataloader(
-    dataset : Dataset,
-    shuffle : bool,
-    batch_size: int,
-) -> torch.utils.data.DataLoader:
-
-    torch_dataset = TabDataset(dataset)
-    loader = torch.utils.data.DataLoader(torch_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=1)
-
-    return loader
-
 class FastTensorDataLoader:
     """
     A DataLoader-like object for a set of tensors that can be much faster than
@@ -588,6 +488,7 @@ class FastTensorDataLoader:
     def __len__(self):
         return self.n_batches
 
+
 def prepare_fast_dataloader(
     D : Dataset,
     batch_size: int
@@ -603,53 +504,3 @@ def prepare_fast_dataloader(
     dataloader = FastTensorDataLoader(X, batch_size=batch_size, shuffle=True)
     while True:
         yield from dataloader
-
-def prepare_fast_torch_dataloader(
-    D : Dataset,
-    batch_size: int
-):
-    if D.X_cat is not None:
-        X = torch.from_numpy(np.concatenate([D.X_num, D.X_cat], axis=1)).float()
-    else:
-        X = torch.from_numpy(D.X_num).float()
-
-    dataloader = FastTensorDataLoader(X, batch_size=batch_size, shuffle=True)
-    return dataloader
-
-def round_columns(X_real, X_synth, columns):
-    for col in columns:
-        uniq = np.unique(X_real[:,col])
-        dist = cdist(X_synth[:, col][:, np.newaxis].astype(float), uniq[:, np.newaxis].astype(float))
-        X_synth[:, col] = uniq[dist.argmin(axis=1)]
-    return X_synth
-
-def concat_features(D : Dataset):
-    if D.X_num is None:
-        assert D.X_cat is not None
-        X = pd.DataFrame(D.X_cat, columns=range(D.n_features))
-    elif D.X_cat is None:
-        assert D.X_num is not None
-        X = pd.DataFrame(D.X_num, columns=range(D.n_features))
-    else:
-        X = pd.concat(
-                [
-                    pd.DataFrame(D.X_num, columns=range(D.n_num_features)),
-                    pd.DataFrame(
-                        D.X_cat,
-                        columns=range(D.n_num_features, D.n_features),
-                    ),
-                ],
-                axis=1,
-            )
-
-    return X
-
-def concat_to_pd(X_num, X_cat, y):
-    if X_num is None:
-        return pd.DataFrame(X_cat, columns=list(range(X_cat.shape[1])))
-    if X_cat is not None:
-        return pd.concat([
-            pd.DataFrame(X_num, columns=list(range(X_num.shape[1]))),
-            pd.DataFrame(X_cat, columns=list(range(X_num.shape[1], X_num.shape[1] + X_cat.shape[1])))
-        ], axis=1)
-    return pd.DataFrame(X_num, columns=list(range(X_num.shape[1])))

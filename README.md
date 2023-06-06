@@ -58,8 +58,7 @@ Los parámetros para la ejecución del modelo se encuentran un fichero de config
 
 `lib/` -- Directorio con bibliotecas locales del proyecto
 
-- `lib/data.py` -- script principal para la llamada a los procesos de entrenamiento y muestreo
-- `lib/env.py` -- script para el proceso de entrenamiento
+- `lib/data.py` -- definición de clases y métodos para trabajo con MLD
 - `lib/util.py` -- script con funciones auxiliares para el entrenamiento
 
 ## Referencias

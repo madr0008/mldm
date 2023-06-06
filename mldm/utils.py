@@ -133,15 +133,6 @@ def index_to_log_onehot(x, num_classes):
     log_onehot = torch.log(x_onehot.float().clamp(min=1e-30))
     return log_onehot
 
-def log_sum_exp_by_classes(x, slices):
-    device = x.device
-    res = torch.zeros_like(x)
-    for ixs in slices:
-        res[:, ixs] = torch.logsumexp(x[:, ixs], dim=1, keepdim=True)
-
-    assert x.size() == res.size()
-
-    return res
 
 @torch.jit.script
 def log_sub_exp(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -165,8 +156,6 @@ def sliced_logsumexp(x, slices):
     )
     return slice_lse_repeated
 
-def log_onehot_to_index(log_x):
-    return log_x.argmax(1)
 
 class FoundNANsError(BaseException):
     """Found NANs during sampling"""
