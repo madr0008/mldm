@@ -9,7 +9,8 @@ from sklearn.preprocessing import MinMaxScaler
 import lib
 
 def to_good_ohe(ohe, X):
-    indices = np.cumsum([0] + ohe._n_features_outs)
+    aux = [len(a) for a in ohe.categories_]
+    indices = np.cumsum([0] + aux)
     Xres = []
     for i in range(1, len(indices)):
         x_ = np.max(X[:, indices[i - 1]:indices[i]], axis=1)
@@ -70,7 +71,7 @@ def sample(
         if len(K) == 0 or T_dict['cat_encoding'] == 'one-hot':
             K = np.array([0])
 
-        num_numerical_features_ = D.X_num.shape[1] if D.X_num is not None else 0
+        num_numerical_features_ = D.n_num_features
         d_in = np.sum(K) + num_numerical_features_
         model_params['d_in'] = int(d_in)
         model = get_model(
@@ -97,7 +98,7 @@ def sample(
         else:
             X_gen = diffusion.sample_all(num_samples, batch_size, ddim=False)
 
-        num_numerical_features = num_numerical_features_
+        num_numerical_features = D.n_num_features_before
 
         X_num_ = X_gen
         if num_numerical_features < X_gen.shape[1]:
@@ -116,15 +117,6 @@ def sample(
                     scaler.fit(X_num_[:,col].reshape(-1, 1))
                     X_num_[:,col] = scaler.transform(X_num_[:,col].reshape(-1, 1)).flatten()
             X_num = X_num_[:, :num_numerical_features]
-
-            disc_cols = []
-            for col in range(D.X_num.shape[1]):
-                uniq_vals = np.unique(D.X_num[:, col])
-                if len(uniq_vals) <= 32 and ((uniq_vals - np.round(uniq_vals)) == 0).all():
-                    disc_cols.append(col)
-            print("Discrete cols:", disc_cols)
-            if len(disc_cols):
-                X_num = round_columns(D.X_num, X_num, disc_cols)
 
             X_num_total = np.concatenate((X_num_total, X_num), axis=0)
 

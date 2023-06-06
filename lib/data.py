@@ -87,6 +87,7 @@ def loadArff(arffPath, xmlPath):
     #Get data
     catAttributes = []
     numAttributes = []
+    labels = []
     numDecimals = [0] * len(numAttributesIndexes)
     for line in lines[(aux+1):]:
         if line[0] == '{':
@@ -94,12 +95,16 @@ def loadArff(arffPath, xmlPath):
             sparse = True
             catAttributesAux = ['0' for c in catAttributesIndexes]
             numAttributesAux = [0 for n in numAttributesIndexes]
+            labelsAux = ['0' for c in labelsIndexes]
             pairs = line.replace('{', '').replace('}', '').replace('\n', '').split(',')
             for p in pairs:
                 pair = p.split(' ')
                 index = int(pair[0])
-                if index in catAttributesIndexes or i in labelsIndexes:
+                if index in catAttributesIndexes:
                     catAttributesAux[catAttributesIndexes.index(index)] = pair[1]
+                elif index in labelsIndexes:
+                    catAttributesAux[catAttributesIndexes.index(index)] = pair[1]
+                    labelsAux[labelsIndexes.index(index)] = pair[1]
                 else:
                     numAttributesAux[numAttributesIndexes.index(index)] = float(pair[1])
                     nAux = len(pair[1].split('.')[1]) if '.' in pair[1] else 0
@@ -107,6 +112,7 @@ def loadArff(arffPath, xmlPath):
                         numDecimals[numAttributesIndexes.index(index)] = nAux
             if len(catAttributesIndexes) + len(labelsIndexes) > 0:
                 catAttributes.append(catAttributesAux)
+                labels.append(labelsAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
         else:
@@ -114,10 +120,14 @@ def loadArff(arffPath, xmlPath):
             sparse = False
             catAttributesAux = []
             numAttributesAux = []
+            labelsAux = []
             values = line.split(',')
             for i in range(len(values)):
-                if i in catAttributesIndexes or i in labelsIndexes:
+                if i in catAttributesIndexes:
                     catAttributesAux.append(values[i].replace('\n',''))
+                elif i in labelsIndexes:
+                    catAttributesAux.append(values[i].replace('\n', ''))
+                    labelsAux.append(values[i].replace('\n', ''))
                 else:
                     numAttributesAux.append(float(values[i]))
                     nAux = len(values[i].split('.')[1]) if '.' in values[i] else 0
@@ -125,14 +135,16 @@ def loadArff(arffPath, xmlPath):
                         numDecimals[numAttributesIndexes.index(i)] = nAux
             if len(catAttributesIndexes) + len(labelsIndexes) > 0:
                 catAttributes.append(catAttributesAux)
+                labels.append(labelsAux)
             if len(numAttributesIndexes) > 0:
                 numAttributes.append(numAttributesAux)
 
     #Transform lists of lists to numpy arrays
     numAttributesRet = np.array([np.array(xi) for xi in numAttributes]) if len(numAttributes) > 0 else None
     catAttributesRet = np.array([np.array(xi) for xi in catAttributes]) if len(catAttributes) > 0 else None
+    labelsRet = np.array([np.array(xi) for xi in labels]) if len(labels) > 0 else None
 
-    return numAttributesRet, catAttributesRet, len(labelNames), header, sparse, numAttributesIndexes, catAttributesIndexes, labelsIndexes, numDecimals
+    return numAttributesRet, catAttributesRet, labelsRet, header, sparse, numAttributesIndexes, catAttributesIndexes, labelsIndexes, numDecimals
 
 
 def toArff(D, X_num, X_cat, num_instances, filename):
@@ -169,7 +181,7 @@ def toArff(D, X_num, X_cat, num_instances, filename):
 class Dataset:
     X_num: np.ndarray
     X_cat: np.ndarray
-    n_labels: Optional[int]
+    labels: np.ndarray
     arffHeader: str
     sparse: bool
     numIndexes: list
@@ -181,18 +193,18 @@ class Dataset:
     def from_dir(cls, dir_: str, strategy: str, pct: int):
 
         dir_ = Path(dir_)
-        X_num, X_cat, numLabels, header, sparse, numIndexes, catIndexes, labelIndexes, numDecimals = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
+        X_num, X_cat, labels, header, sparse, numIndexes, catIndexes, labelIndexes, numDecimals = loadArff((str(dir_) + '.arff'), (str(dir_) + '.xml'))
 
         D = Dataset(
                 X_num,
                 X_cat,
-                numLabels,
+                labels,
                 header,
                 sparse,
                 numIndexes,
                 catIndexes,
                 labelIndexes,
-                numDecimals
+                numDecimals,
             )
 
         if strategy == "general":
@@ -205,16 +217,16 @@ class Dataset:
 
     def get_minoritary_labels(self):
 
-        labelCount = [0] * self.n_labels
+        labelCount = [0] * self.labels.shape[1]
 
-        for instance in self.X_cat:
+        for instance in self.labels:
             for label in range(len(labelCount)):
-                labelCount[label] += int(instance[-(self.n_labels - label)])
+                labelCount[label] += int(instance[label])
 
         IRlbl = []
 
         for count in labelCount:
-            IRlbl.append(((self.X_cat.shape[0]/count) - 1))
+            IRlbl.append(((self.size()/count) - 1))
 
         meanIR = sum(IRlbl)/len(IRlbl)
 
@@ -229,11 +241,11 @@ class Dataset:
 
     def get_minoritary_instances(self, pct):
 
-        minoritaryLabels = self.get_minoritary_labels()[:int(self.n_labels)*pct]
+        minoritaryLabels = self.get_minoritary_labels()[:int(self.labels.shape[1])*pct]
         minoritaryIndexes = dict((str(j), []) for (j, n) in minoritaryLabels)
-        for i in range(self.X_cat.shape[0]):
+        for i in range(self.size()):
             for (j, n) in minoritaryLabels:
-                if int(self.X_cat[i][-(self.n_labels - j)]) == 1:
+                if int(self.labels[i][j]) == 1:
                     minoritaryIndexes[str(j)].append(i)
         return minoritaryIndexes
 
@@ -247,16 +259,17 @@ class Dataset:
         for j, l in minoritaryIndexes.items():
             X_num = np.take(self.X_num, l, axis=0)
             X_cat = np.take(self.X_cat, l, axis=0)
+            labels = np.take(self.labels, l, axis=0)
             D = Dataset(
                 X_num,
                 X_cat,
-                self.n_labels,
+                labels,
                 self.arffHeader,
                 self.sparse,
                 self.numIndexes,
                 self.catIndexes,
                 self.labelIndexes,
-                self.numDecimals
+                self.numDecimals,
             )
             minoritaryDatasets.append(D)
 
@@ -277,16 +290,17 @@ class Dataset:
 
         X_num = np.take(self.X_num, indexes, axis=0)
         X_cat = np.take(self.X_cat, indexes, axis=0)
+        labels = np.take(self.labels, indexes, axis=0)
         D = Dataset(
             X_num,
             X_cat,
-            self.n_labels,
+            labels,
             self.arffHeader,
             self.sparse,
             self.numIndexes,
             self.catIndexes,
             self.labelIndexes,
-            self.numDecimals
+            self.numDecimals,
         )
 
         return D
@@ -297,6 +311,10 @@ class Dataset:
         return 0 if self.X_num is None else self.X_num.shape[1]
 
     @property
+    def n_num_features_before(self) -> int:
+        return len(self.numIndexes)
+
+    @property
     def n_cat_features(self) -> int:
         return 0 if self.X_cat is None else self.X_cat.shape[1]
 
@@ -305,11 +323,14 @@ class Dataset:
         return self.n_num_features + self.n_cat_features
 
     def size(self) -> int:
-        return self.X_cat.shape[0]
+        return self.labels.shape[0]
+
+    def n_labels(self) -> int:
+        return self.labels.shape[1]
 
     @property
     def nn_output_dim(self) -> int:
-        return self.n_labels
+        return self.labels.shape[1]
 
     def get_category_sizes(self) -> List[int]:
         return [] if self.X_cat is None else get_category_sizes(self.X_cat)
@@ -435,7 +456,7 @@ def transform_dataset(
             X_num = (
                 X_cat
                 if X_num is None
-                else {x: np.hstack([X_num[x], X_cat[x]]) for x in X_num}
+                else np.hstack([X_num, X_cat])
             )
             X_cat = None
 

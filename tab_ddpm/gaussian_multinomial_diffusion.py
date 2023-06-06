@@ -983,7 +983,7 @@ class GaussianMultinomialDiffusion(torch.nn.Module):
             for i in range(b):
                 for k in range(len(minLabels)):
                     (j, n) = minLabels[k]
-                    if int(sample[i][-(D.n_labels - j)].item()) == 1:
+                    if int(sample[i][-(D.n_labels() - j)].item()) == 1:
                         all_samples.append(sample[i].tolist())
                         newMinLabels[k] += 1
                         num_valid += 1
