@@ -146,6 +146,5 @@ def train(
         )
         trainer.run_loop()
 
-        trainer.loss_history.to_csv(os.path.join(parent_dir, 'loss.csv'), index=False)
         torch.save(diffusion._denoise_fn.state_dict(), os.path.join(parent_dir, 'model_' + str(i) + '.pt'))
         torch.save(trainer.ema_model.state_dict(), os.path.join(parent_dir, 'model_' + str(i) + '_ema.pt'))

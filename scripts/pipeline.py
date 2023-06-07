@@ -1,5 +1,3 @@
-import shutil
-import os
 import argparse
 from train import train
 from sample import sample
@@ -7,14 +5,6 @@ import zero
 import lib
 import torch
 
-
-def save_file(parent_dir, config_path):
-    try:
-        dst = os.path.join(parent_dir)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copyfile(os.path.abspath(config_path), dst)
-    except shutil.SameFileError:
-        pass
 
 def main():
     parser = argparse.ArgumentParser(
@@ -32,7 +22,6 @@ def main():
     
     timer = zero.Timer()
     timer.run()
-    save_file(os.path.join(raw_config['parent_dir'], 'config.toml'), args.config)
 
     train(
         **raw_config['train']['main'],
