@@ -180,7 +180,7 @@ class Dataset:
                 numIndexes,
                 catIndexes,
                 labelIndexes,
-                numDecimals,
+                numDecimals
             )
 
         if strategy == "general":
@@ -202,14 +202,17 @@ class Dataset:
         IRlbl = []
 
         for count in labelCount:
-            IRlbl.append(((self.size()/count) - 1))
+            if count > 0:
+                IRlbl.append(((self.size()/count) - 1))
+            else:
+                IRlbl.append(0) #So that we do not take it into account
 
         meanIR = sum(IRlbl)/len(IRlbl)
 
         minoritaryLabels = []
 
         for i in range(len(IRlbl)):
-            if IRlbl[i] < meanIR:
+            if IRlbl[i] > meanIR:
                 minoritaryLabels.append((i, labelCount[i]))
 
         return sorted(minoritaryLabels, key=lambda x: x[1])
@@ -233,9 +236,9 @@ class Dataset:
 
         minoritaryDatasets = []
         for j, l in minoritaryIndexes.items():
-            X_num = np.take(self.X_num, l, axis=0)
-            X_cat = np.take(self.X_cat, l, axis=0)
-            labels = np.take(self.labels, l, axis=0)
+            X_num = np.take(self.X_num, l, axis=0) if self.X_num is not None else None
+            X_cat = np.take(self.X_cat, l, axis=0) if self.X_cat is not None else None
+            labels = np.take(self.labels, l, axis=0) if self.labels is not None else None
             D = Dataset(
                 X_num,
                 X_cat,
@@ -264,9 +267,9 @@ class Dataset:
                 if index not in indexes:
                     indexes.append(index)
 
-        X_num = np.take(self.X_num, indexes, axis=0)
-        X_cat = np.take(self.X_cat, indexes, axis=0)
-        labels = np.take(self.labels, indexes, axis=0)
+        X_num = np.take(self.X_num, indexes, axis=0) if self.X_num is not None else None
+        X_cat = np.take(self.X_cat, indexes, axis=0) if self.X_cat is not None else None
+        labels = np.take(self.labels, indexes, axis=0) if self.labels is not None else None
         D = Dataset(
             X_num,
             X_cat,

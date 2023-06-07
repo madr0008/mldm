@@ -56,10 +56,8 @@ def sample(
         0
     )[0]
 
-    minLabels = D_aux.get_minoritary_labels()
-
     X_num_total = D_aux.X_num
-    X_cat_total = D_aux.X_cat
+    X_cat_total = D_aux.cat_transform.inverse_transform(D_aux.X_cat)
 
     for i in range(len(datasets)):
 
@@ -107,7 +105,7 @@ def sample(
             X_cat = D.cat_transform.inverse_transform(X_gen[:, num_numerical_features:])
             X_cat_total = np.concatenate((X_cat_total, X_cat), axis=0)
 
-        if num_numerical_features_ != 0:
+        if num_numerical_features != 0:
             X_num_ = X_gen[:, :num_numerical_features]
             if alFinal:
                 X_num_ = D.num_transform.inverse_transform(X_num_)
@@ -120,4 +118,6 @@ def sample(
 
             X_num_total = np.concatenate((X_num_total, X_num), axis=0)
 
-    toArff(D_aux, X_num_total, X_cat_total, X_num_total.shape[0], output_file)
+    nInstances = X_num_total.shape[0] if X_num_total is not None else X_cat_total.shape[0]
+
+    toArff(D_aux, X_num_total, X_cat_total, nInstances, output_file)
