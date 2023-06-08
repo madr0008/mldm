@@ -7,6 +7,7 @@ Argumentos principales:
 - `real_data_path = "datasets/birds/birds"` -- subdirectorio en el que se encuentran los datos
 - `model_type = "mlp"` -- Tipo de modelo para el proceso inverso de difusión
 - `device = "cuda:0"` -- Dispositivo en el que se llevarán a cabo los cálculos
+- `num_threads = 1"` -- Número de hilos empleados en la ejecución del algoritmo
 
 Parámetros del modelo MLP para difusión inversa:
 - `d_layers = [256, 256]` -- Capas ocultas de la red neuronal
@@ -29,7 +30,7 @@ Parámetros de transformación de datos:
 - `cat_encoding = "__none__"` -- Transformación para datos categóricos. Por ejemplo, `ohe` (one hot encoding)
 
 Parámetros del proceso de muestreo:
-- `sample_percentage = 25` -- Porcentaje de instancias a generar respecto al tamaño original del dataset
+- `sample_percentage = 25` -- Porcentaje de instancias a generar respecto al tamaño original del MLD
 - `strategy = "general"` -- Estrategia de muestreo
 - `max_iterations = 10000` -- Número máximo de iteraciones para la estrategia general
 - `batch_size = 1000` -- Número de muestras generadas por tanda

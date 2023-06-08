@@ -4,6 +4,7 @@ real_data_path = "../datasets/birds/birds"
 output_file = "salida.arff"
 model_type = "mlp"
 device = "cuda:0"
+num_threads = 1
 
 [model_params.rtdl_params]
 d_layers = [

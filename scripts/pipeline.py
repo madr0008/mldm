@@ -15,7 +15,13 @@ def main():
 
     args = parser.parse_args()
     raw_config = lib.load_config(args.config)
-    if 'device' in raw_config :
+
+    if 'num_threads' in raw_config:
+        torch.set_num_threads(raw_config['num_threads'])
+    else:
+        torch.set_num_threads(1)
+
+    if 'device' in raw_config:
         device = torch.device(raw_config['device'])
     else :
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
