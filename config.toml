@@ -26,15 +26,13 @@ batch_size = 4096
 
 [train.T]
 seed = 0
-normalization = "quantile"
-cat_encoding = "__none__"
+normalization = "minmax"
+cat_encoding = "one-hot"
 
 [sample]
 sample_percentage = 25
 strategy = "mixed"
 label_percentage = 50
 max_iterations = 10000
-normalize_last = "True"
-normalize_quantile = "False"
 batch_size = 1000
 seed = 0

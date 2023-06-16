@@ -16,3 +16,4 @@ tomli==1.2.2
 tqdm==4.62.3
 bs4
 lxml
+zero

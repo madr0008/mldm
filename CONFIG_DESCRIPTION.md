@@ -22,16 +22,17 @@ Parámetros del entrenamiento:
 - `steps = 1000` -- Número de pasos del proceso de entrenamiento
 - `lr = 0.001` -- Tasa de aprendizaje
 - `weight_decay = 1e-05` -- Decaimiento de los pesos
-- `batch_size = 4096` -- 
+- `batch_size = 4096` -- Número de muestras almacenadas en la GPU
 
 Parámetros de transformación de datos:
 - `seed = 0` -- Semilla para las transformaciones de los datos
-- `normalization = "quantile"` -- Tipo de normalización en datos numéricos
-- `cat_encoding = "__none__"` -- Transformación para datos categóricos. Por ejemplo, `ohe` (one hot encoding)
+- `normalization = "minmax"` -- Tipo de normalización en datos numéricos (minmax, standard o quantile)
+- `cat_encoding = "one-hot"` -- Transformación para datos categóricos.
 
 Parámetros del proceso de muestreo:
 - `sample_percentage = 25` -- Porcentaje de instancias a generar respecto al tamaño original del MLD
-- `strategy = "general"` -- Estrategia de muestreo
+- `strategy = "mixed"` -- Estrategia de muestreo (mixed, general o specific)
+- `label_percentage = 50` -- Porcentaje de las etiquetas más minoritarias a considerar
 - `max_iterations = 10000` -- Número máximo de iteraciones para la estrategia general
 - `batch_size = 1000` -- Número de muestras generadas por tanda
 
@@ -43,6 +44,7 @@ parent_dir = "../datasets/birds"
 real_data_path = "../datasets/birds/birds"
 model_type = "mlp"
 device = "cuda:0"
+num_threads = 1
 
 [model_params.rtdl_params]
 d_layers = [
@@ -70,6 +72,7 @@ cat_encoding = "__none__"
 [sample]
 sample_percentage = 25
 strategy = "general"
+label_percentage = 50
 max_iterations = 1000
 batch_size = 10000
 seed = 0
