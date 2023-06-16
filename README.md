@@ -24,6 +24,8 @@ Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/
     conda activate mldm
     ```
 
+Puede obtenerse un contenedor de docker a partir del archivo [Dockerfile](Dockerfile), con las bibliotecas necesarias ya instaladas, a falta de crear el entorno virtual de conda, siguiendo los mencionados comandos.
+
 ### Conjuntos de datos
 
 Los conjuntos de datos multietiqueta (MLD) soportados por el algoritmo son aquellos en formato ARFF, acompañados de un fichero XML que especifique el nombre de las etiquetas. Este formato es el mismo que usa la biblioteca [MULAN](https://mulan.sourceforge.net/).

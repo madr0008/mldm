@@ -35,8 +35,6 @@ def sample(
     label_percentage=50,
     max_iter = 1000,
     output_file = "salida.arff",
-    alFinal = True,
-    quantileFinal=False,
     quantile = False
 ):
     zero.improve_reproducibility(seed)
@@ -107,13 +105,12 @@ def sample(
 
         if num_numerical_features != 0:
             X_num_ = X_gen[:, :num_numerical_features]
-            if alFinal:
+            if not quantile:
                 X_num_ = D.num_transform.inverse_transform(X_num_)
-            if not quantile or (quantile and quantileFinal):
-                for col in range(num_numerical_features):
-                    scaler = MinMaxScaler(feature_range=(D_aux.X_num.min(axis=0)[col], D_aux.X_num.max(axis=0)[col]))
-                    scaler.fit(X_num_[:,col].reshape(-1, 1))
-                    X_num_[:,col] = scaler.transform(X_num_[:,col].reshape(-1, 1)).flatten()
+            for col in range(num_numerical_features):
+                scaler = MinMaxScaler(feature_range=(D_aux.X_num.min(axis=0)[col], D_aux.X_num.max(axis=0)[col]))
+                scaler.fit(X_num_[:,col].reshape(-1, 1))
+                X_num_[:,col] = scaler.transform(X_num_[:,col].reshape(-1, 1)).flatten()
             X_num = X_num_[:, :num_numerical_features]
 
             X_num_total = np.concatenate((X_num_total, X_num), axis=0)

@@ -56,8 +56,6 @@ def main():
         label_percentage=raw_config['sample']['label_percentage'],
         max_iter=raw_config['sample']['max_iterations'],
         output_file=raw_config['output_file'],
-        alFinal=raw_config['sample']['normalize_last']=="True",
-        quantileFinal=raw_config['sample']['normalize_quantile'] == "True",
         quantile=raw_config['train']['T']['normalization']=="quantile"
     )
 
