@@ -16,13 +16,13 @@ Y así con el resto de particiones y MLD. Todos estos ficheros pueden descargars
 ## Scripts de ejecución
 Dentro del subdirectorio `Ejecucion` se encuentran aquellos scripts para generar ficheros necesarios para la ejecución.
 
-###MLDM
+### MLDM
 Los ficheros para la ejecución del algoritmo MLDM son:
 - `generar_configs.R` -- generación de ficheros config en un directorio para las diferentes variantes de MLDM  
 - `generar_script_ejecucion_mldm.R` -- generación de un script bash de ejecución de las distintas variantes
 - `generar_metricas_mldm.R` -- generación de ficheros csv con métricas descriptivas de los MLDM resultantes
 
-###Clasificadores
+### Clasificadores
 Los ficheros para la ejecución de clasificadores multietiqueta tras aplicar MLDM son:
 - `generar_script_ejecucion_clasificadores.R` -- generación de un script bash de ejecución de los distintos clasificadores con los MLD generados
 - `generar_metricas_clasificadores.R` -- generación de ficheros csv con métricas de evaluación de los clasificadores ejecutados
