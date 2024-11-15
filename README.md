@@ -1,12 +1,11 @@
-# MLDM: Multilabel Diffusion Models
-Repositorio del TFG "Diseño de algoritmos de remuestreo multi-etiqueta con modelos generativos profundos".
+Repository for the model presented in the soon to be published article “Addressing Multilabel Imbalance with an Efficiency-Focused Approach Using Diffusion Model-Generated Synthetic Samples”.
 
-Se trata de la implementación de un modelo de difusión para oversampling de datos multietiqueta.
-Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/rotot0/tab-ddpm).
+This is the implementation of a diffusion model for oversampling multi-label data.
+This implementation is an adaptation of the [TabDDPM model](https://github.com/rotot0/tab-ddpm).
 
-## Ejecución del modelo
-1. Instalar [conda](https://docs.conda.io/en/latest/miniconda.html) para gestionar el entorno virtual.
-2. Ejecutar los siguientes comandos, para crear el entorno e instalar las dependencias necesarias.
+## Running the model
+1. Install [conda](https://docs.conda.io/en/latest/miniconda.html) in order to manage the virtual environment.
+2. Execute the following commands to create the environment and install the necessary dependencies:
     ```bash
     export REPO_DIR=/path/to/the/code
     cd $REPO_DIR
@@ -24,17 +23,17 @@ Esta implementación es una adaptación del modelo [TabDDPM](https://github.com/
     conda activate mldm
     ```
 
-Puede obtenerse un contenedor de docker a partir del archivo [Dockerfile](Dockerfile), con las bibliotecas necesarias ya instaladas, a falta de crear el entorno virtual de conda, siguiendo los mencionados comandos.
+A Docker container can be built from the [Dockerfile](Dockerfile), with the required libraries pre-installed. However, you will still need to create the conda virtual environment by following the commands mentioned above.
 
-### Conjuntos de datos
+### Datasets
 
-Los conjuntos de datos multietiqueta (MLD) soportados por el algoritmo son aquellos en formato ARFF, acompañados de un fichero XML que especifique el nombre de las etiquetas. Este formato es el mismo que usa la biblioteca [MULAN](https://mulan.sourceforge.net/).
+The multi-label datasets (MLD) supported by the algorithm are those in ARFF format, accompanied by an XML file specifying the label names. This format is the same used by the [MULAN library](https://mulan.sourceforge.net/).
 
-En el repositorio [Cometa](https://cometa.ujaen.es/) se recopila una gran variedad de MLD, completos o previamente particionados. 
+The [Cometa](https://cometa.ujaen.es/) repository gathers a wide variety of MLDs, either complete or pre-partitioned.
 
-### Llamada al algoritmo
+### Running the Algorithm
 
-Para ejecutar el algoritmo sobre un conjunto de datos, tan solo hay que ejecutar los siguientes comandos.
+In order to execute the algorithm on a dataset, simply run the following commands:
 
 ``` bash
 conda activate mldm
@@ -42,30 +41,30 @@ cd $PROJECT_DIR
 python scripts/pipeline.py --config_file=config.toml
 ```
 
-Los parámetros para la ejecución del modelo se encuentran un fichero de configuración con formato `toml`. La estructura y parámetros recogidos en este fichero se explican [aquí](CONFIG_DESCRIPTION.md).
+The parameters for running the model are specified in a configuration file in toml format. The structure and parameters included in this file are explained [here](CONFIG_DESCRIPTION.md).
 
-## Estructura de ficheros
-`mldm/` -- Directorio con la implementación del método propuesto
+## File structure
+`mldm/` -- Directory containing the implementation of the proposed method
 
-- `mldm/gaussian_multinomial_diffusion.py` -- modelo de difusión  
-- `mldm/modules.py` -- otros módulos que componen el modelo principal
-- `mldm/utils.py` -- funciones matemáticas para el modelo
+- `mldm/gaussian_multinomial_diffusion.py` -- diffusion model
+- `mldm/modules.py` -- additional modules forming the main model
+- `mldm/utils.py` -- mathematical functions for the model
 
-`scripts/` -- Directorio con los scripts del proyecto
+`scripts/` -- Directory containing project scripts
 
-- `scripts/pipeline.py` -- script principal para la llamada a los procesos de entrenamiento y muestreo
-- `scripts/sample.py` -- script para el proceso de muestreo
-- `scripts/train.py` -- script para el proceso de entrenamiento
-- `scripts/utils_train.py` -- script con funciones auxiliares para el entrenamiento
+- `scripts/pipeline.py` -- main script for invoking training and sampling processes
+- `scripts/sample.py` -- script for the sampling process
+- `scripts/train.py` -- script for the training process
+- `scripts/utils_train.py` -- script with auxiliary functions for training
 
-`lib/` -- Directorio con bibliotecas locales del proyecto
+`lib/` -- Directory containing local libraries for the project
 
-- `lib/data.py` -- definición de clases y métodos para trabajo con MLD
-- `lib/util.py` -- script con funciones auxiliares para el entrenamiento
+- `lib/data.py` -- definition of classes and methods for working with MLDs
+- `lib/util.py` -- script with auxiliary functions for training
 
-## Referencias
+## References
 
-Este proyecto ha sido construido a partir de el trabajo previo reflejado en los siguientes artículos:
+This project is based on prior work reflected in the following papers:
 
 - Kotelnikov, A., Baranchuk, D., Rubachev, I., & Babenko, A. (2022). TabDDPM: Modelling Tabular Data with Diffusion Models. arXiv preprint arXiv:2209.15421.
 
