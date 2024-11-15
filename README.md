@@ -1,3 +1,5 @@
+# MLDM: Multilabel Diffusion Models
+
 Repository for the model presented in the soon to be published article “Addressing Multilabel Imbalance with an Efficiency-Focused Approach Using Diffusion Model-Generated Synthetic Samples”.
 
 This is the implementation of a diffusion model for oversampling multi-label data.
